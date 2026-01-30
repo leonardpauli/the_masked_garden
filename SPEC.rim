@@ -1,0 +1,379 @@
+#!/usr/bin/env rim
+# mask-garden-seed | game jam project spec
+' domain: masked.garden
+	theme: mask = modulator of perception (filter, lens, contract, instrument)
+	feel: joy, delight, interaction, no fail state, infinite polish surface
+	2026-01-30 | refactor agent
+
+# concept
+
+mask_garden // soft, joyful, shippable
+	' top-down / slight tilt / semi-3D diorama
+	' wander a small world wearing different masks
+	' each mask reveals invisible layers, changes audio mix, alters interaction
+	' collisions trigger tuned sounds
+	' slow movement = ambient pads; fast = percussive hits
+	core_loop: walk -> tilt phone -> interact -> world responds musically
+	swap_mask: same space feels totally different
+	mvp: 1 small map, 3 masks, touch/bump/hover interaction
+
+# tsm structure | typescript monorepo
+
+paths
+	"@ts/*": "env/ts/*"
+	"@ui/*": "env/react_web/*"
+	"@game/*": "env/game/*"
+
+env/ // environment, portable layers
+	ts/
+		lib/ // pure ts, no platform deps
+			reg/ // registry pattern core
+				types.ts
+				index.ts
+			audio/
+				engine.ts // web audio wrapper
+				bus.ts // routing
+				impact.ts // collision -> sound
+			util/
+		demo/ // runnable examples
+
+	game/ // game logic, no react, no three.js!
+		lib/
+			world.ts // entity + component store
+			mask.ts // mask parameter bundles
+			zone.ts // spatial areas
+			clock.ts // global timing, beat sync
+			impact.ts // collision -> event
+		state/ // jotai atoms, data layer source of truth
+			atoms.ts
+			actions.ts
+
+	three/ // three.js rendering, subscribes to game state
+		lib/
+			renderer.ts
+			camera.ts
+			particles.ts
+			zones.ts
+		demo/
+
+	react_web/ // thin UI shell over game state
+		lib/
+			hooks.ts // useAtom bridges
+			components/
+		demo/
+
+ent/ // entrypoints
+	web/
+		main/ // landing page -> game
+			index.html
+			main.tsx
+		sound/ // sound team demo
+			index.html
+			main.tsx
+		art/ // art direction + 3D assets
+			index.html
+			main.tsx
+		particles/ // shader effects exploration
+			index.html
+			main.tsx
+		assets/ // asset browser + preview
+			index.html
+			main.tsx
+
+run/
+	dev.command // pnpm dev
+	QUICKSTART.command
+
+public/
+	assets/ // drop zone for team
+		audio/
+		models/
+		textures/
+		masks/
+
+# data flow | critical architecture
+
+' NEVER: React -> Three.js (react state drives three)
+' ALWAYS: DataLayer (source of truth) -> Three.js (subscribes)
+'                                     -> React UI (subscribes via jotai)
+'         User input -> Actions -> DataLayer
+
+data_layer // source of truth
+	atoms: jotai // reactive state
+	actions: fns // fire-and-forget mutations
+
+three_world // subscribes to data_layer
+	on data_layer.change: update scene
+	' three.js never pushes state back
+
+react_ui // subscribes via jotai hooks
+	on atom.change: re-render
+	on user_input: call action // fire-and-forget
+
+# registry pattern | core architecture
+
+reg<T> // single point of contact
+	entries: {[id: str]: T}
+	register: (id, entry) -> void
+	get: (id) -> T?
+	list: () -> T[]
+	tags: (tag) -> T[]
+
+' additative: one file, one import, one entry
+' composable: registries can reference each other
+
+registries
+	- asset_reg // textures, gltf, sprites, audio buffers
+	- mask_reg // parameter bundles
+	- zone_reg // spatial areas + ambience + postFX
+	- interactable_reg // affordance templates
+	- emitter_reg // particles, decals, one-shots
+	- bus_reg // audio routing graphs
+
+# masks | parameter bundles
+
+mask_def
+	id: slug
+	name: str
+	visual
+		render_layers: str[] // which layers visible
+		post_fx: post_fx_params
+		color_ramp: color[]
+	audio
+		lpf_cutoff: num // 0..1
+		reverb_send: num
+		chorus_amount: num
+		bus_routing: {[bus]: num}
+	interaction
+		reveal_tags: str[] // what becomes interactable
+		hide_tags: str[]
+		affordances: slug[]
+	physics
+		gravity_mult: num
+		collision_softness: num
+
+masks // starter set
+	- trust // people open up
+		visual.render_layers: [base, spirits, secrets]
+		audio.reverb_send: 0.4
+	- silence // world quiets, secrets appear
+		visual.post_fx.saturation: 0.3
+		audio.lpf_cutoff: 0.3
+	- noise // chaos, crowds, rhythm
+		audio.chorus_amount: 0.6
+		visual.post_fx.chromatic_aberration: 0.02
+
+# precedence rule
+' Base defaults < Zone < Mask < Entity < Live runtime
+
+# audio engine | web audio api
+
+audio_engine
+	clock: global_beat_clock
+	buses
+		master
+			music_bus // loop layers, quantized
+			ambience_bus // zone layers
+			sfx_bus // one-shots, impacts
+
+	fx_per_bus
+		biquad_filter
+		dynamics_compressor
+
+	fx_global
+		delay_feedback // fake reverb, lightweight
+		' convolver: later if time
+
+impact_event
+	pos: vec2
+	impulse: num // collision velocity magnitude
+	material_tag: slug
+	' maps to: gain, filter brightness, sample set, reverb send
+
+audio_exports // what sound team provides
+	ambience_loops
+		zone_ambient_base // 30-90s seamless
+		zone_ambient_air // layer
+		zone_ambient_detail // layer
+	music_loops
+		pad_loop // 8 or 16 bars
+		perc_loop // same length
+		melody_fragments // short motifs
+	one_shots
+		touch_soft_01..N
+		touch_sharp_01..N
+		impact_soft_01..N
+		impact_hard_01..N
+		swap_mask_01..N
+	motion
+		move_whoosh_slow
+		move_whoosh_fast
+
+# rendering | three.js 2.5D
+
+camera
+	type: perspective // subtle, not ortho
+	angle: slight_tilt // top-down ish
+	fov: low // avoid distortion
+	tilt_control: phone_gyro -> camera_yaw // few degrees only
+
+navigation
+	plane: x_z // 2D world
+	height: visual_only // bobbing, hovering, parallax
+
+diorama_tricks
+	- shadow_blob // soft blob under entities
+	- rim_light // outline shader for interactables
+	- zone_fog // gentle fog or vignette per zone
+	- tilt_parallax // subtle depth feel
+
+# demo pages | team workflows
+
+demos
+	/demo/assets
+		' browse assets, preview gltf + textures + audio
+		' show metadata, tags
+		' team can drop files, see instant preview
+
+	/demo/masks
+		' select mask -> see visual/audio modulation live
+		' parameter tweaking
+
+	/demo/audio
+		' mixer board
+		' impact tester (slider -> sound)
+		' loop quantization tester
+
+	/demo/particles
+		' emitter gallery
+		' impulse slider -> particle response
+
+	/demo/zones
+		' walk cursor through zones
+		' feel transitions (audio + visual)
+
+	/demo/game
+		' the actual loop
+
+# asset api | dev server
+
+asset_manifest // GET /api/assets
+	items: many asset_entry
+
+asset_entry
+	id: slug // path-derived
+	kind: gltf | png | wav | mp3 | ogg
+	url: str
+	hash: str // content hash
+	suggested_tags: str[] // from folder names
+
+' dev server watches /public/assets/**
+' auto-updates manifest on file change
+' demos auto-populate pickers from manifest
+
+# mobile first
+
+input
+	touch: primary
+	tilt: gyro -> subtle camera adjust
+	' no virtual joystick
+
+responsive
+	portrait: default
+	landscape: supported
+	safe_areas: respected
+
+haptics
+	on impact: vibration proportional to impulse
+
+# tooling
+
+package_manager: pnpm
+linter: oxlint
+formatter: oxfmt
+bundler: vite
+typescript: strict
+
+scripts
+	pnpm dev // starts all demo servers
+	pnpm build // production build
+	pnpm check // lint + typecheck
+	pnpm fmt // format
+
+windows_compat
+	' use forward slashes in paths
+	' no shell-specific scripts
+	' node-based tooling only
+
+# file patterns
+
+file_size
+	<50: small
+	50..150: optimal
+	>300: split required
+
+naming
+	fn: module_action // snake_case
+	component: TitleCase // React
+	file: kebab-case.ts
+
+imports
+	order: std -> 3rd party -> @ts -> @game -> @ui -> relative
+	' always use path aliases
+
+# registry files | pattern
+
+reg_file // env/*/lib/**/reg.ts
+	imports: entry from each feature file
+	export const xxx_reg: Reg<XxxDef> = reg_create({
+		feature_a,
+		feature_b,
+	})
+
+feature_file // env/*/lib/**/feature.ts
+	export const feature_a: FeatureDef = {
+		id: 'feature_a',
+		// ... params
+	}
+
+# project setup | checklist
+
+init
+	- [] create repo: masked-garden (public)
+	- [] pnpm init
+	- [] add tsconfig, vite, oxlint
+	- [] create env/ + ent/ structure
+	- [] copy ts-refactoring-patterns.md
+	- [] copy react-patterns.md (adapted for this)
+	- [] setup path aliases
+
+core
+	- [] registry pattern base (env/ts/lib/reg)
+	- [] data layer with jotai (env/game/state)
+	- [] audio engine skeleton (env/ts/lib/audio)
+	- [] three.js renderer base (env/three/lib)
+
+demos
+	- [] /demo/assets - asset browser
+	- [] /demo/audio - sound team workspace
+	- [] /demo/art - 3D asset preview
+	- [] /demo/particles - shader effects
+	- [] landing -> game (ent/web/main)
+
+content
+	- [] 3 starter masks (trust, silence, noise)
+	- [] 1 small map / zone
+	- [] audio loops + one-shots from Sean
+	- [] basic particle emitters
+
+polish
+	- [] mobile touch + tilt
+	- [] haptics
+	- [] smooth transitions
+	- [] deploy to masked.garden
+
+later
+	- [] multiplayer server
+	- [] more masks
+	- [] more zones
+	- [] narrative / GM layer
