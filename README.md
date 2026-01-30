@@ -1,4 +1,4 @@
-# Mask Garden
+# Masked Garden
 
 Game jam project - theme: **mask**
 

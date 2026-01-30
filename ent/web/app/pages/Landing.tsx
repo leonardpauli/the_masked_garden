@@ -26,7 +26,7 @@ export const LandingPage = () => {
 					color: '#fff',
 				}}
 			>
-				MASK GARDEN
+				MASKED GARDEN
 			</h1>
 
 			<p
