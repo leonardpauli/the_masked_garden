@@ -14,7 +14,9 @@ export default defineConfig({
 		},
 	},
 	server: {
-		port: 3000,
+		port: 8000,
+		host: '0.0.0.0',
+		allowedHosts: ['the.masked.garden', 'masked.exe.xyz'],
 	},
 	root: 'ent/web/app',
 	publicDir: resolve(__dirname, 'public'),
