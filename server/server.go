@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -41,16 +42,18 @@ var upgrader = websocket.Upgrader{
 var playerIDCounter uint64
 
 type PlayerState struct {
-	X  float64 `json:"x"`
-	Y  float64 `json:"y"`
-	Z  float64 `json:"z"`
-	VX float64 `json:"vx"`
-	VY float64 `json:"vy"`
-	VZ float64 `json:"vz"`
+	X        float64 `json:"x"`
+	Y        float64 `json:"y"`
+	Z        float64 `json:"z"`
+	VX       float64 `json:"vx"`
+	VY       float64 `json:"vy"`
+	VZ       float64 `json:"vz"`
+	ColorHue float64 `json:"colorHue"`
 }
 
 type Player struct {
 	ID       uint64
+	ColorHue float64
 	conn     *websocket.Conn
 	lastPing time.Time
 	state    PlayerState
@@ -73,6 +76,7 @@ type WSMessage struct {
 	Type        string                 `json:"type"`
 	PlayerCount int                    `json:"playerCount,omitempty"`
 	ID          uint64                 `json:"id,omitempty"`
+	ColorHue    float64                `json:"colorHue,omitempty"`
 	State       *PlayerState           `json:"state,omitempty"`
 	Players     map[uint64]PlayerState `json:"players,omitempty"`
 	BuildTime   string                 `json:"buildTime,omitempty"`
@@ -145,7 +149,9 @@ func broadcastPlayerStates() {
 		playerConns := make(map[*Player]uint64)
 		for _, player := range players {
 			player.stateMu.Lock()
-			states[player.ID] = player.state
+			state := player.state
+			state.ColorHue = player.ColorHue // Include player's unique color
+			states[player.ID] = state
 			player.stateMu.Unlock()
 			playerConns[player] = player.ID
 		}
@@ -175,7 +181,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := atomic.AddUint64(&playerIDCounter, 1)
-	player := &Player{ID: id, conn: conn, lastPing: time.Now()}
+	// Golden angle distribution for unique colors
+	colorHue := math.Mod(float64(id)*137.508, 360)
+	player := &Player{ID: id, ColorHue: colorHue, conn: conn, lastPing: time.Now()}
 
 	playersMu.Lock()
 	players[conn] = player
@@ -186,7 +194,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	buildTimeStr := lastBuild.UTC().Format(time.RFC3339)
 	buildMu.RUnlock()
 
-	welcomeMsg := WSMessage{Type: "welcome", ID: id, BuildTime: buildTimeStr}
+	welcomeMsg := WSMessage{Type: "welcome", ID: id, ColorHue: colorHue, BuildTime: buildTimeStr}
 	welcomeData, _ := json.Marshal(welcomeMsg)
 	conn.WriteMessage(websocket.TextMessage, welcomeData)
 

@@ -1,6 +1,6 @@
 import { gameStore } from '../store'
 import { playerCountAtom, wsConnectedAtom, myPlayerIdAtom, otherPlayersAtom, lastBuildTimeAtom, PlayerState } from '../store/atoms/onlineAtoms'
-import { playerPositionAtom, playerVelocityAtom } from '../store/atoms/playerAtoms'
+import { playerPositionAtom, playerVelocityAtom, playerColorHueAtom } from '../store/atoms/playerAtoms'
 
 let ws: WebSocket | null = null
 let pingInterval: number | null = null
@@ -51,10 +51,13 @@ export function connectWebSocket() {
       switch (msg.type) {
         case 'welcome':
           gameStore.set(myPlayerIdAtom, msg.id)
+          if (msg.colorHue !== undefined) {
+            gameStore.set(playerColorHueAtom, msg.colorHue)
+          }
           if (msg.buildTime) {
             gameStore.set(lastBuildTimeAtom, new Date(msg.buildTime))
           }
-          console.log('My player ID:', msg.id)
+          console.log('My player ID:', msg.id, 'Color hue:', msg.colorHue)
           break
 
         case 'buildTime':

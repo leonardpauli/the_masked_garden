@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { gameStore } from '../store'
-import { playerPositionAtom } from '../store/atoms/playerAtoms'
+import { playerPositionAtom, playerColorHueAtom } from '../store/atoms/playerAtoms'
 import { otherPlayersAtom } from '../store/atoms/onlineAtoms'
 
 const MINIMAP_SIZE = 80 // Smaller minimap
@@ -37,6 +37,7 @@ export function Minimap() {
       lastDrawTime.current = timestamp
 
       const playerPos = gameStore.get(playerPositionAtom)
+      const playerHue = gameStore.get(playerColorHueAtom)
       const otherPlayers = gameStore.get(otherPlayersAtom)
 
       // Clear canvas
@@ -64,10 +65,10 @@ export function Minimap() {
       ctx!.lineTo(MINIMAP_SIZE - 8, MINIMAP_SIZE / 2)
       ctx!.stroke()
 
-      // Collect all positions
+      // Collect all positions with colors
       const positions = [
-        { x: playerPos.x, z: playerPos.z, isMe: true },
-        ...Array.from(otherPlayers.values()).map(p => ({ x: p.x, z: p.z, isMe: false }))
+        { x: playerPos.x, z: playerPos.z, isMe: true, colorHue: playerHue },
+        ...Array.from(otherPlayers.values()).map(p => ({ x: p.x, z: p.z, isMe: false, colorHue: p.colorHue }))
       ]
 
       // Find bounds
@@ -93,23 +94,24 @@ export function Minimap() {
         if (pos.isMe) continue
         const screenX = MINIMAP_SIZE / 2 + ((pos.x - centerX) / range) * (MINIMAP_SIZE - 16)
         const screenY = MINIMAP_SIZE / 2 + ((pos.z - centerZ) / range) * (MINIMAP_SIZE - 16)
-        
-        ctx!.fillStyle = 'rgba(136, 170, 255, 0.8)'
+
+        // Use player's unique color from golden angle hue
+        ctx!.fillStyle = `hsla(${pos.colorHue}, 70%, 55%, 0.9)`
         ctx!.beginPath()
         ctx!.arc(screenX, screenY, DOT_RADIUS_OTHER, 0, Math.PI * 2)
         ctx!.fill()
       }
 
-      // Draw me
+      // Draw me with my unique color
       const myScreenX = MINIMAP_SIZE / 2 + ((playerPos.x - centerX) / range) * (MINIMAP_SIZE - 16)
       const myScreenY = MINIMAP_SIZE / 2 + ((playerPos.z - centerZ) / range) * (MINIMAP_SIZE - 16)
-      
-      ctx!.fillStyle = '#4ade80'
+
+      ctx!.fillStyle = `hsl(${playerHue}, 70%, 55%)`
       ctx!.beginPath()
       ctx!.arc(myScreenX, myScreenY, DOT_RADIUS_ME, 0, Math.PI * 2)
       ctx!.fill()
-      
-      // White border on me
+
+      // White border on me to stand out
       ctx!.strokeStyle = 'white'
       ctx!.lineWidth = 1
       ctx!.stroke()
