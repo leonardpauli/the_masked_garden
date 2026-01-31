@@ -6,12 +6,14 @@ import { UIOverlay } from './ui/UIOverlay'
 import { gameLoop } from './game/GameLoop'
 import { keyboardInput } from './input/KeyboardInput'
 import { isMobile } from './utils/device'
+import { connectWebSocket } from './online/wsClient'
 import './App.css'
 
 export function App() {
   useEffect(() => {
     // Initialize game systems
     gameLoop.start()
+    connectWebSocket()
 
     if (!isMobile()) {
       keyboardInput.initialize()
