@@ -1,0 +1,186 @@
+================================================================================
+SESSION LOG - Masked Garden Game Project
+Date: 2026-01-31 17:00
+Session Focus: Camera System, Tree Obstacles, Player Character
+================================================================================
+
+PROJECT LOCATION: c:\GameJam\MaskedGarden\game\
+
+================================================================================
+CHANGES MADE THIS SESSION
+================================================================================
+
+1. CAMERA SYSTEM OVERHAUL
+-------------------------
+Problem: Camera was locked to top-down view with no way to adjust angle.
+
+Solution: Implemented adjustable view angle slider (0° = top-down, 70° = third-person)
+
+Files Modified:
+- game/src/store/atoms/configAtoms.ts
+  - Renamed cameraHeightAtom → cameraDistanceAtom (default: 14)
+  - Added cameraViewAngleAtom (default: 43)
+
+- game/src/engine/ThreeEngine.ts (lines 340-366)
+  - Camera position calculated using spherical coordinates:
+    height = distance * cos(angleRad)
+    zOffset = distance * sin(angleRad)
+  - Fixed rotation: camera.rotation.set(-Math.PI / 2 + angleRad, 0, 0)
+  - No left/right rotation when player moves sideways
+
+- game/src/ui/DevPanel.tsx
+  - "Distance" slider (5-50)
+  - "View Angle" slider (0-70)
+  - "Smoothing" slider (0.01-1)
+
+Camera Fix Note: Originally used camera.lookAt() which caused unwanted rotation
+when player moved sideways. Replaced with fixed rotation based only on view angle.
+
+
+2. TREE OBSTACLES (Replaced Icosahedrons)
+-----------------------------------------
+Files Created:
+- game/public/models/foliage/treefab.glb (copied from Assets)
+
+Files Modified:
+- game/src/engine/ThreeEngine.ts
+  - generateObstacles() now loads treefab.glb and clones it
+  - Trees placed randomly, avoiding center spawn area
+  - Random scale: 0.5 to 1.3
+
+Source Model: Assets/Player/Player Character/treefab.glb
+
+
+3. PLAYER CHARACTER (Head + Body with Random Colors)
+-----------------------------------------------------
+Files Created:
+- game/public/models/player/charHead.glb
+- game/public/models/player/charBody.glb
+(Copied from Assets/Player/Player Character/MiiChar/)
+
+Files Modified:
+- game/src/engine/ThreeEngine.ts - loadPlayer() method completely rewritten
+
+Implementation:
+- Player is now a THREE.Group containing head and body meshes
+- Head: Random skin color from Fitzpatrick scale (12 tones)
+- Body: Random high-saturation playful color (10 options)
+- Colors randomize on each page load
+
+Skin Colors (Fitzpatrick Scale):
+  Light:  #FFDFC4, #F0D5BE, #EECEB3, #E1B899
+  Medium: #D4A574, #C68642, #BA7D52, #A67B5B
+  Dark:   #8D5524, #6B4423, #4A3728, #3B2F2F
+
+Body Colors (Playful/High Saturation):
+  #FF6B6B (Coral), #4ECDC4 (Teal), #FFE66D (Yellow),
+  #95E1D3 (Mint), #F38181 (Salmon), #AA96DA (Lavender),
+  #FCBAD3 (Pink), #A8D8EA (Sky Blue), #FF9F43 (Orange),
+  #6BCB77 (Green)
+
+
+================================================================================
+CURRENT FILE STRUCTURE
+================================================================================
+
+game/
+├── public/
+│   └── models/
+│       ├── player/
+│       │   ├── charHead.glb      # Player head mesh
+│       │   └── charBody.glb      # Player body mesh
+│       ├── foliage/
+│       │   └── treefab.glb       # Tree obstacle model
+│       └── player.glb            # Old player model (unused now)
+│
+└── src/
+    ├── engine/
+    │   └── ThreeEngine.ts        # Main game engine (camera, player, obstacles)
+    ├── store/atoms/
+    │   └── configAtoms.ts        # Camera: distance=14, viewAngle=43
+    └── ui/
+        └── DevPanel.tsx          # Dev sliders for camera, player, physics
+
+
+================================================================================
+KEY CODE SNIPPETS
+================================================================================
+
+CAMERA CALCULATION (ThreeEngine.ts):
+```typescript
+const angleRad = (viewAngle * Math.PI) / 180
+const height = distance * Math.cos(angleRad)
+const zOffset = distance * Math.sin(angleRad)
+
+this.camera.position.x += (targetX - this.camera.position.x) * smoothing
+this.camera.position.y += (targetY - this.camera.position.y) * smoothing
+this.camera.position.z += (targetZ - this.camera.position.z) * smoothing
+
+this.camera.rotation.set(-Math.PI / 2 + angleRad, 0, 0)
+```
+
+PLAYER LOADING (ThreeEngine.ts):
+```typescript
+// Random colors selected at load time
+const skinColor = skinColors[Math.floor(Math.random() * skinColors.length)]
+const bodyColor = bodyColors[Math.floor(Math.random() * bodyColors.length)]
+
+this.player = new THREE.Group()
+// Load charHead.glb with skinColor material
+// Load charBody.glb with bodyColor material
+```
+
+
+================================================================================
+ASSET SOURCES
+================================================================================
+
+Original Assets Location: c:\GameJam\MaskedGarden\Assets\
+
+Player Models:
+  Source: Assets/Player/Player Character/MiiChar/
+  - charHead.glb (3.5 KB)
+  - charBody.glb (132 bytes)
+
+Tree Model:
+  Source: Assets/Player/Player Character/treefab.glb
+
+
+================================================================================
+HOW TO RUN
+================================================================================
+
+cd c:\GameJam\MaskedGarden\game
+pnpm dev
+
+Opens at: http://localhost:5173
+
+Dev Panel: Click "< DEV" button on right side to access sliders
+
+
+================================================================================
+KNOWN WORKING STATE
+================================================================================
+
+- Camera: Adjustable from top-down to third-person view
+- Camera: Follows player smoothly without sideways rotation
+- Trees: Load and display as obstacles
+- Player: Head with random skin tone, body with random bright color
+- Player: Randomizes colors on each page refresh
+- All dev sliders functional
+
+
+================================================================================
+NEXT STEPS / IDEAS
+================================================================================
+
+- Player animations
+- Collision detection with trees
+- More foliage variety
+- Level design / procedural generation
+- Multiplayer sync for player colors
+
+
+================================================================================
+END OF SESSION LOG
+================================================================================

@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(ls -lah \"c:\\\\GameJam\\\\MaskedGarden\\\\game\\\\public\\\\models\\\\player\"\" 2>nul || echo \"Player models directory check \")",
+      "Bash(dir \"c:\\\\GameJam\\\\MaskedGarden\\\\game\\\\public\\\\models\\\\player\")",
+      "Bash(dir \"c:\\\\GameJam\\\\MaskedGarden\\\\game\\\\public\\\\models\\\\foliage\")"
     ]
   }
 }
