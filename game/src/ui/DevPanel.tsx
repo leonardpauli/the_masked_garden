@@ -9,7 +9,9 @@ import {
   collisionCooldownAtom,
   damageAmountAtom,
   devPanelOpenAtom,
+  visualStyleAtom,
 } from '../store/atoms/configAtoms'
+import { visualStyleConfigs, visualStyleOptions, type VisualStyle } from '../types/visualStyles'
 
 interface SliderProps {
   label: string
@@ -49,6 +51,7 @@ export function DevPanel() {
   const [gravity, setGravity] = useAtom(gravityAtom)
   const [collisionCooldown, setCollisionCooldown] = useAtom(collisionCooldownAtom)
   const [damageAmount, setDamageAmount] = useAtom(damageAmountAtom)
+  const [visualStyle, setVisualStyle] = useAtom(visualStyleAtom)
 
   return (
     <div className={`dev-panel ${isOpen ? 'open' : 'closed'}`}>
@@ -61,6 +64,21 @@ export function DevPanel() {
 
       {isOpen && (
         <div className="dev-panel-content">
+          <h3>Visual Style</h3>
+          <div className="dev-dropdown">
+            <select
+              value={visualStyle}
+              onChange={(e) => setVisualStyle(e.target.value as VisualStyle)}
+              className="dev-select"
+            >
+              {visualStyleOptions.map((style) => (
+                <option key={style} value={style}>
+                  {visualStyleConfigs[style].name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <h3>Player</h3>
           <Slider
             label="Speed"
