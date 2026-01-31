@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Provider } from 'jotai'
 import { gameStore } from './store'
-import { Scene } from './components/Scene'
+import { GameCanvas } from './components/GameCanvas'
 import { UIOverlay } from './ui/UIOverlay'
 import { gameLoop } from './game/GameLoop'
 import { keyboardInput } from './input/KeyboardInput'
@@ -26,7 +26,7 @@ export function App() {
   return (
     <Provider store={gameStore}>
       <div className="game-container">
-        <Scene />
+        <GameCanvas />
         <UIOverlay />
       </div>
     </Provider>

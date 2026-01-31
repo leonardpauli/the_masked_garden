@@ -1,4 +1,5 @@
 import { atom } from 'jotai/vanilla'
+import type { VisualStyle } from '../../types/visualStyles'
 
 // Player config
 export const playerSpeedAtom = atom<number>(8)
@@ -15,6 +16,9 @@ export const gravityAtom = atom<number>(20)
 // Game config
 export const collisionCooldownAtom = atom<number>(500)
 export const damageAmountAtom = atom<number>(10)
+
+// Visual style config
+export const visualStyleAtom = atom<VisualStyle>('default')
 
 // Dev panel visibility
 export const devPanelOpenAtom = atom<boolean>(true)

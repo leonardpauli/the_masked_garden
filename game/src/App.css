@@ -324,3 +324,37 @@
   cursor: pointer;
   border: none;
 }
+
+/* Dropdown styles */
+.dev-dropdown {
+  margin-bottom: 0.5rem;
+}
+
+.dev-select {
+  width: 100%;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.4);
+  color: white;
+  border: 1px solid rgba(68, 136, 255, 0.5);
+  border-radius: 4px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.dev-select:hover {
+  border-color: #4488ff;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.dev-select:focus {
+  border-color: #4488ff;
+  box-shadow: 0 0 0 2px rgba(68, 136, 255, 0.3);
+}
+
+.dev-select option {
+  background: #1a1a2e;
+  color: white;
+  padding: 0.5rem;
+}

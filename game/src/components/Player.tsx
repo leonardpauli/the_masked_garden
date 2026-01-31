@@ -13,28 +13,41 @@ import {
   playerDampingAtom,
   collisionCooldownAtom,
   damageAmountAtom,
+  visualStyleAtom,
 } from '../store/atoms/configAtoms'
 import { setPlayerPosition, takeDamage } from '../actions/playerActions'
 import { endGame } from '../actions/gameActions'
+import { visualStyleConfigs } from '../types/visualStyles'
 
 export function Player() {
   const rigidBodyRef = useRef<RapierRigidBody>(null)
   const lastCollisionTime = useRef(0)
   const { scene } = useGLTF('/models/player.glb')
 
-  // Apply toon material to all meshes in the model
+  // Apply toon material to all meshes in the model, updating when visual style changes
   useEffect(() => {
-    const toonMaterial = new MeshToonMaterial({
-      color: '#4488ff',
-    })
+    const updateMaterial = () => {
+      const visualStyle = gameStore.get(visualStyleAtom)
+      const config = visualStyleConfigs[visualStyle]
+      
+      const toonMaterial = new MeshToonMaterial({
+        color: config.playerColor,
+      })
 
-    scene.traverse((child) => {
-      if (child instanceof Mesh) {
-        child.material = toonMaterial
-        child.castShadow = true
-        child.receiveShadow = true
-      }
-    })
+      scene.traverse((child) => {
+        if (child instanceof Mesh) {
+          child.material = toonMaterial
+          child.castShadow = true
+          child.receiveShadow = true
+        }
+      })
+    }
+
+    updateMaterial()
+    
+    // Subscribe to visual style changes
+    const unsubscribe = gameStore.sub(visualStyleAtom, updateMaterial)
+    return () => unsubscribe()
   }, [scene])
 
   useFrame(() => {
