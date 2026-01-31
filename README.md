@@ -1,78 +1,133 @@
-# Masked Garden
+# The Masked Garden
 
-Game jam project - theme: **mask**
+A multiplayer browser game built for a game jam (theme: **mask**).
 
-Domain: [masked.garden](https://masked.garden)
+**Live at:** https://the.masked.garden
 
 ## Quick Start
 
 ```bash
+cd game
 pnpm install
 pnpm dev
 ```
 
-Open http://localhost:3000
-
-## Routes
-
-| Route | Purpose |
-|-------|---------|
-| `/` | Landing page |
-| `#demo` | Demo index |
-| `#demo/game` | Main game |
-| `#demo/sound` | Sound team workspace |
-| `#demo/art` | Art direction (TODO) |
-| `#demo/particles` | Shader effects (TODO) |
-| `#demo/assets` | Asset browser (TODO) |
-
-Demo pages use additative registry pattern - see `ent/web/app/demos/reg.ts`
+For production with multiplayer server:
+```bash
+cd server
+go build -o server
+./server
+```
 
 ## Architecture
 
-```
-Pure TS Data Layer = Source of Truth
-         |
-    +----+----+
-    |         |
-    v         v
-Three.js   Jotai Atoms
-(reads     (reflects)
- per-frame)    |
-               v
-           React UI
-           (subscribes)
-```
+### Data Flow Principles
 
-**Rules:**
-- Never flow data React → Three.js
-- Three.js reads raw data directly (imperative, per-frame)
-- React reads via Jotai atoms (reactive, on-change)
-- All mutations go through actions
-
-See [data-flow.md](data-flow.md) for full architecture.
-
-## Structure
+The architecture follows a strict unidirectional data flow pattern:
 
 ```
-env/
-  ts/lib/        # pure TS utilities
-  game/          # game logic (no react, no three)
-    state/       # jotai atoms + actions
-    lib/         # masks, zones, etc
-  three/lib/     # three.js rendering
-  react_web/lib/ # react hooks + components
-
-ent/web/         # entrypoints
-public/assets/   # drop zone for team
+┌─────────────────────────────────────────────────────────────┐
+│                     DATA LAYER (Source of Truth)            │
+│                     Jotai Atoms in store/atoms/             │
+└─────────────────────────────────────────────────────────────┘
+                              │
+          ┌───────────────────┼───────────────────┐
+          │                   │                   │
+          ▼                   ▼                   ▼
+    ┌──────────┐       ┌──────────┐       ┌──────────┐
+    │  React   │       │ Three.js │       │  Online  │
+    │    UI    │       │  Render  │       │   Sync   │
+    │ (reads)  │       │ (reads)  │       │ (reads)  │
+    └──────────┘       └──────────┘       └──────────┘
+          │                   │                   │
+          └───────────────────┼───────────────────┘
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │     ACTIONS      │
+                    │ Pure TS functions│
+                    │   (mutations)    │
+                    └──────────────────┘
+                              │
+                              ▼
+                     Updates Data Layer
 ```
 
-## Patterns & Docs
+**Key Rules:**
+1. **Atoms are the single source of truth** - All game state lives in Jotai atoms
+2. **React only reads** - Components subscribe to atoms via hooks, never mutate directly
+3. **Three.js only reads** - Render loop reads from atoms, syncs to 3D objects
+4. **Mutations go through Actions** - Pure TypeScript functions in `actions/` that call `gameStore.set()`
+5. **No React → Three.js data flow** - Both subscribe independently to the data layer
 
-| Doc | Purpose |
-|-----|--------|
-| [data-flow.md](data-flow.md) | Clean data flow architecture |
-| [stable-randomness.md](stable-randomness.md) | Seeded world generation |
-| [graceful-degradation.md](graceful-degradation.md) | Load handling & throttling |
-| [ts-refactoring-patterns.md](ts-refactoring-patterns.md) | TypeScript patterns |
-| [react-patterns.md](react-patterns.md) | React patterns |
-| [SPEC.rim](SPEC.rim) | Full architecture spec |
+### Directory Structure
+
+```
+the_masked_garden/
+├── game/                    # Frontend (Vite + React + Three.js)
+│   ├── src/
+│   │   ├── store/           # Jotai store and atoms
+│   │   │   ├── index.ts     # Shared store instance
+│   │   │   └── atoms/       # State atoms by domain
+│   │   │       ├── playerAtoms.ts
+│   │   │       ├── gameAtoms.ts
+│   │   │       ├── inputAtoms.ts
+│   │   │       ├── configAtoms.ts
+│   │   │       └── onlineAtoms.ts
+│   │   ├── actions/         # Pure functions that mutate state
+│   │   │   ├── playerActions.ts
+│   │   │   ├── gameActions.ts
+│   │   │   └── inputActions.ts
+│   │   ├── components/      # Three.js/R3F components
+│   │   ├── ui/              # React UI components
+│   │   ├── online/          # WebSocket client
+│   │   ├── input/           # Input handlers (keyboard, gyro)
+│   │   ├── engine/          # Game engine (alternative Three.js impl)
+│   │   └── game/            # Game loop logic
+│   └── dist/                # Production build output
+├── server/                  # Go WebSocket server
+│   ├── server.go            # Main server with WS + webhook
+│   ├── go.mod
+│   └── go.sum
+├── Assets/                  # Blender/3D assets
+└── the-masked-garden.service  # systemd service file
+```
+
+### State Domains
+
+| Atom File | Purpose |
+|-----------|--------|
+| `playerAtoms.ts` | Player position, velocity, health |
+| `gameAtoms.ts` | Game state (menu/playing/gameover), score |
+| `inputAtoms.ts` | Current input direction, input source |
+| `configAtoms.ts` | Tunable parameters (speed, gravity, camera) |
+| `onlineAtoms.ts` | Player count, connection status, other players |
+
+### Multiplayer
+
+The Go server handles:
+- WebSocket connections at `/ws`
+- Player state broadcasting at 5Hz
+- GitHub webhook at `/__webhook` for auto-deploy
+- Static file serving for the built game
+
+Clients send their position + velocity, receive other players' states.
+Ghost players render as semi-transparent spheres with interpolated movement.
+
+## Development
+
+### Adding New State
+
+1. Create atom in appropriate file under `store/atoms/`
+2. Create action functions in `actions/` to mutate it
+3. Subscribe in React via `useAtomValue()` or in game loop via `gameStore.get()`
+
+### Input Handling
+
+- Keyboard: `input/KeyboardInput.ts` → calls `setInputDirection()`
+- Gyro/Tilt: `input/GyroInput.ts` → calibrates on enable, uses relative orientation
+
+## Deployment
+
+Pushes to `main` trigger automatic rebuild via GitHub webhook.
+See hosting README for operational details.

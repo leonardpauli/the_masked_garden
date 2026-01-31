@@ -1,0 +1,239 @@
+================================================================================
+CLAUDE SESSION LOG - Masked Garden Game Project
+Date: 2026-01-31
+================================================================================
+
+PROJECT OVERVIEW
+----------------
+A mobile-first top-down 3D game built with Vite + TypeScript + React + Three.js.
+Uses Jotai vanilla atoms for state management with a clear separation between
+game engine and React UI.
+
+LOCATION: c:\GameJam\MaskedGarden\game\
+
+================================================================================
+TECH STACK
+================================================================================
+- Vite (build tool)
+- TypeScript
+- React 18
+- Three.js via @react-three/fiber
+- @react-three/rapier (physics)
+- @react-three/drei (helpers, GLTF loader)
+- Jotai (state management with vanilla store)
+
+Package manager: pnpm
+Node version manager: fnm (Fast Node Manager)
+
+================================================================================
+ARCHITECTURE - DATA FLOW
+================================================================================
+
+Input (Keyboard/Gyro) → Actions (plain functions) → Jotai Store → React UI/R3F
+                                                         ↑
+                                          Game Loop subscribes & reads
+
+KEY PRINCIPLES:
+1. Single vanilla Jotai store shared between game engine and React
+2. Actions are plain functions that call gameStore.set()
+3. Game loop subscribes to state changes via gameStore.sub()
+4. React components read state via useAtomValue() hooks
+5. 3D components read directly via gameStore.get() in useFrame for performance
+
+================================================================================
+FOLDER STRUCTURE
+================================================================================
+game/
+├── index.html
+├── package.json
+├── pnpm-lock.yaml
+├── vite.config.ts
+├── tsconfig.json
+├── tsconfig.node.json
+├── .gitignore
+├── public/
+│   └── models/
+│       └── player.glb          # Player 3D model (copied from Assets/)
+└── src/
+    ├── main.tsx                # Entry point
+    ├── App.tsx                 # Main app, initializes game systems
+    ├── App.css                 # All styles including dev panel
+    │
+    ├── store/
+    │   ├── index.ts            # Vanilla Jotai store instance
+    │   └── atoms/
+    │       ├── playerAtoms.ts  # position, health
+    │       ├── gameAtoms.ts    # state, score
+    │       ├── inputAtoms.ts   # direction vector, input source
+    │       └── configAtoms.ts  # DEV CONFIG: speed, scale, camera, etc.
+    │
+    ├── actions/
+    │   ├── playerActions.ts    # setPlayerPosition, takeDamage, resetPlayer
+    │   ├── gameActions.ts      # startGame, pauseGame, endGame, addScore
+    │   └── inputActions.ts     # setInputDirection, setInputSource
+    │
+    ├── game/
+    │   └── GameLoop.ts         # Score tracking, subscriptions
+    │
+    ├── input/
+    │   ├── KeyboardInput.ts    # Arrow keys + WASD
+    │   └── GyroInput.ts        # DeviceOrientation API for mobile tilt
+    │
+    ├── components/             # React Three Fiber 3D components
+    │   ├── Scene.tsx           # Canvas + Physics wrapper
+    │   ├── Player.tsx          # GLB model with MeshToonMaterial
+    │   ├── TopDownCamera.tsx   # Pure top-down (no tilt)
+    │   ├── Ground.tsx          # Floor plane
+    │   ├── Lighting.tsx        # Ambient + directional
+    │   ├── Icosahedron.tsx     # Single obstacle
+    │   └── ObstacleField.tsx   # Generates random obstacles
+    │
+    ├── ui/                     # React UI overlay
+    │   ├── UIOverlay.tsx       # Main container, shows DevPanel in dev mode
+    │   ├── StartScreen.tsx     # Play button
+    │   ├── GameOverScreen.tsx  # Final score, restart
+    │   ├── HealthBar.tsx       # Player health display
+    │   ├── ScoreDisplay.tsx    # Current score
+    │   ├── GyroPermission.tsx  # iOS permission button
+    │   └── DevPanel.tsx        # SLIDERS FOR REAL-TIME CONFIG
+    │
+    ├── types/
+    │   └── game.ts             # TypeScript interfaces
+    │
+    └── utils/
+        └── device.ts           # isMobile(), supportsGyro()
+
+================================================================================
+DEV PANEL SYSTEM
+================================================================================
+Located in: src/ui/DevPanel.tsx
+Config atoms in: src/store/atoms/configAtoms.ts
+
+The dev panel provides real-time sliders to adjust:
+
+PLAYER:
+  - playerSpeedAtom (default: 8, range: 1-30)
+  - playerScaleAtom (default: 0.5, range: 0.1-2)
+  - playerDampingAtom (default: 3, range: 0-10)
+
+CAMERA:
+  - cameraHeightAtom (default: 20, range: 5-50)
+  - cameraSmoothingAtom (default: 0.1, range: 0.01-1)
+
+PHYSICS:
+  - gravityAtom (default: 20, range: 0-50)
+
+COMBAT:
+  - damageAmountAtom (default: 10, range: 1-50)
+  - collisionCooldownAtom (default: 500ms, range: 100-2000)
+
+Panel only shows in development mode (import.meta.env.DEV).
+Toggle visibility with devPanelOpenAtom.
+
+================================================================================
+PLAYER MODEL
+================================================================================
+Original location: c:\GameJam\MaskedGarden\Assets\Player\Player Character\player_high.glb
+Copied to: c:\GameJam\MaskedGarden\game\public\models\player.glb
+
+The Player.tsx component:
+- Loads GLB via useGLTF from @react-three/drei
+- Applies MeshToonMaterial (blue color) to all meshes
+- Uses ball collider for physics
+- Scale controlled by playerScaleAtom
+
+================================================================================
+CAMERA SETUP
+================================================================================
+- Pure top-down view (camera directly above player)
+- No tilt - rotation locked to (-PI/2, 0, 0)
+- Smooth follow with configurable smoothing
+- Height adjustable via cameraHeightAtom
+
+================================================================================
+GAME CONTROLS
+================================================================================
+Desktop: Arrow keys or WASD
+Mobile: Device tilt (gyroscope)
+  - iOS requires permission via DeviceOrientationEvent.requestPermission()
+  - Android grants automatically
+
+================================================================================
+NODE.JS SETUP (for reference)
+================================================================================
+User didn't have Node.js installed. Setup process:
+
+1. Install fnm (Fast Node Manager):
+   winget install Schniz.fnm
+
+2. Enable PowerShell scripts:
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+3. Add fnm to PowerShell profile:
+   Add-Content $PROFILE 'fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression'
+
+4. Restart terminal, then:
+   fnm install 22
+   fnm use 22
+   fnm default 22
+
+5. Install pnpm:
+   npm install -g pnpm
+
+================================================================================
+HOW TO RUN
+================================================================================
+cd c:\GameJam\MaskedGarden\game
+pnpm install   # if node_modules missing
+pnpm dev       # starts Vite dev server at http://localhost:5173
+
+================================================================================
+GIT STATUS
+================================================================================
+- .gitignore created (excludes node_modules/, dist/, .env, etc.)
+- Files staged but not yet committed
+- Untracked: ../Assets/ folder (outside game/ folder)
+
+To commit:
+git commit -m "Initial game setup: Vite + React + Three.js + Jotai"
+
+================================================================================
+CURRENT STATE / WHAT'S WORKING
+================================================================================
+✓ Project structure complete
+✓ Vite dev server runs
+✓ 3D scene renders with top-down camera
+✓ Player model loads (GLB with toon material)
+✓ Physics working (rapier)
+✓ Keyboard input (arrow keys + WASD)
+✓ Gyro input for mobile
+✓ Collision detection with obstacles
+✓ Health/damage system
+✓ Score system (survival time + forward progress)
+✓ UI overlay (start screen, HUD, game over)
+✓ Dev panel with real-time config sliders
+
+================================================================================
+POTENTIAL NEXT STEPS
+================================================================================
+- Create level.json for static obstacle placement
+- Add more obstacle types
+- Implement game progression/difficulty scaling
+- Add sound effects
+- Add visual effects (particles, trails)
+- Mobile touch controls fallback
+- Save/load config presets in dev panel
+- Export config to JSON from dev panel
+
+================================================================================
+KEY FILES TO UNDERSTAND THE ARCHITECTURE
+================================================================================
+1. src/store/index.ts - The vanilla Jotai store
+2. src/actions/*.ts - All state mutations go through here
+3. src/components/Player.tsx - How 3D components read/write state
+4. src/ui/DevPanel.tsx - How React UI reads/writes config atoms
+5. src/App.tsx - How everything is wired together
+
+================================================================================
+END OF SESSION LOG
+================================================================================
