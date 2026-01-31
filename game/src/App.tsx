@@ -5,6 +5,7 @@ import { GameCanvas } from './components/GameCanvas'
 import { UIOverlay } from './ui/UIOverlay'
 import { gameLoop } from './game/GameLoop'
 import { keyboardInput } from './input/KeyboardInput'
+import { touchInput } from './input/TouchInput'
 import { isMobile } from './utils/device'
 import { connectWebSocket } from './online/wsClient'
 import { SoundDebug } from './ui/SoundDebug'
@@ -38,9 +39,13 @@ export function App() {
       keyboardInput.initialize()
     }
 
+    // Touch input for jump (works on all devices with touch)
+    touchInput.initialize()
+
     return () => {
       gameLoop.destroy()
       keyboardInput.destroy()
+      touchInput.destroy()
     }
   }, [route])
 

@@ -6,7 +6,6 @@ import { Mesh } from 'three'
 import { gameStore } from '../store'
 import { inputDirectionAtom } from '../store/atoms/inputAtoms'
 import { gameStateAtom } from '../store/atoms/gameAtoms'
-import { playerHealthAtom } from '../store/atoms/playerAtoms'
 import {
   playerSpeedAtom,
   playerScaleAtom,
@@ -17,7 +16,6 @@ import {
   healthEnabledAtom,
 } from '../store/atoms/configAtoms'
 import { setPlayerPosition, setPlayerVelocity, takeDamage } from '../actions/playerActions'
-import { endGame } from '../actions/gameActions'
 import { visualStyleConfigs } from '../types/visualStyles'
 import { CapeMaterial } from '../materials/CapeMaterial'
 
@@ -95,15 +93,6 @@ export function Player() {
     const position = rigidBodyRef.current.translation()
     setPlayerPosition({ x: position.x, y: position.y, z: position.z })
     setPlayerVelocity({ x: velocity.x, y: velocity.y, z: velocity.z })
-
-    // Check for game over (only if health system is enabled)
-    const healthEnabled = gameStore.get(healthEnabledAtom)
-    if (healthEnabled) {
-      const health = gameStore.get(playerHealthAtom)
-      if (health <= 0) {
-        endGame()
-      }
-    }
   })
 
   const handleCollision = () => {
