@@ -1,95 +1,134 @@
-import { useAtomValue } from 'jotai'
-import { useMemo } from 'react'
+import { useRef, useEffect } from 'react'
+import { gameStore } from '../store'
 import { playerPositionAtom } from '../store/atoms/playerAtoms'
 import { otherPlayersAtom } from '../store/atoms/onlineAtoms'
 
-const MINIMAP_SIZE = 120
-const MIN_RANGE = 20 // Minimum world units to show
-
-interface Dot {
-  x: number
-  y: number
-  isMe: boolean
-}
+const MINIMAP_SIZE = 80 // Smaller minimap
+const DOT_RADIUS_ME = 3
+const DOT_RADIUS_OTHER = 2
+const MIN_RANGE = 20
+const UPDATE_INTERVAL = 1000 / 30 // 30 FPS
 
 export function Minimap() {
-  const playerPos = useAtomValue(playerPositionAtom)
-  const otherPlayers = useAtomValue(otherPlayersAtom)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const lastDrawTime = useRef(0)
 
-  const dots = useMemo((): Dot[] => {
-    const allPositions = [
-      { x: playerPos.x, z: playerPos.z, isMe: true },
-      ...Array.from(otherPlayers.values()).map(p => ({ x: p.x, z: p.z, isMe: false }))
-    ]
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
 
-    if (allPositions.length <= 1) {
-      return [{ x: 50, y: 50, isMe: true }]
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    // Set up canvas for high DPI
+    const dpr = window.devicePixelRatio || 1
+    canvas.width = MINIMAP_SIZE * dpr
+    canvas.height = MINIMAP_SIZE * dpr
+    ctx.scale(dpr, dpr)
+
+    let animationId: number
+
+    function draw(timestamp: number) {
+      // Throttle to 30fps
+      if (timestamp - lastDrawTime.current < UPDATE_INTERVAL) {
+        animationId = requestAnimationFrame(draw)
+        return
+      }
+      lastDrawTime.current = timestamp
+
+      const playerPos = gameStore.get(playerPositionAtom)
+      const otherPlayers = gameStore.get(otherPlayersAtom)
+
+      // Clear canvas
+      ctx!.clearRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE)
+
+      // Don't draw if alone
+      if (otherPlayers.size === 0) {
+        animationId = requestAnimationFrame(draw)
+        return
+      }
+
+      // Draw background
+      ctx!.fillStyle = 'rgba(0, 0, 0, 0.5)'
+      ctx!.beginPath()
+      ctx!.roundRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE, 6)
+      ctx!.fill()
+
+      // Draw grid lines
+      ctx!.strokeStyle = 'rgba(255, 255, 255, 0.1)'
+      ctx!.lineWidth = 0.5
+      ctx!.beginPath()
+      ctx!.moveTo(MINIMAP_SIZE / 2, 8)
+      ctx!.lineTo(MINIMAP_SIZE / 2, MINIMAP_SIZE - 8)
+      ctx!.moveTo(8, MINIMAP_SIZE / 2)
+      ctx!.lineTo(MINIMAP_SIZE - 8, MINIMAP_SIZE / 2)
+      ctx!.stroke()
+
+      // Collect all positions
+      const positions = [
+        { x: playerPos.x, z: playerPos.z, isMe: true },
+        ...Array.from(otherPlayers.values()).map(p => ({ x: p.x, z: p.z, isMe: false }))
+      ]
+
+      // Find bounds
+      let minX = Infinity, maxX = -Infinity
+      let minZ = Infinity, maxZ = -Infinity
+      for (const pos of positions) {
+        minX = Math.min(minX, pos.x)
+        maxX = Math.max(maxX, pos.x)
+        minZ = Math.min(minZ, pos.z)
+        maxZ = Math.max(maxZ, pos.z)
+      }
+
+      // Calculate range with padding
+      const rangeX = Math.max(maxX - minX, MIN_RANGE)
+      const rangeZ = Math.max(maxZ - minZ, MIN_RANGE)
+      const range = Math.max(rangeX, rangeZ) * 1.3
+
+      const centerX = (minX + maxX) / 2
+      const centerZ = (minZ + maxZ) / 2
+
+      // Draw other players first (so we're on top)
+      for (const pos of positions) {
+        if (pos.isMe) continue
+        const screenX = MINIMAP_SIZE / 2 + ((pos.x - centerX) / range) * (MINIMAP_SIZE - 16)
+        const screenY = MINIMAP_SIZE / 2 + ((pos.z - centerZ) / range) * (MINIMAP_SIZE - 16)
+        
+        ctx!.fillStyle = 'rgba(136, 170, 255, 0.8)'
+        ctx!.beginPath()
+        ctx!.arc(screenX, screenY, DOT_RADIUS_OTHER, 0, Math.PI * 2)
+        ctx!.fill()
+      }
+
+      // Draw me
+      const myScreenX = MINIMAP_SIZE / 2 + ((playerPos.x - centerX) / range) * (MINIMAP_SIZE - 16)
+      const myScreenY = MINIMAP_SIZE / 2 + ((playerPos.z - centerZ) / range) * (MINIMAP_SIZE - 16)
+      
+      ctx!.fillStyle = '#4ade80'
+      ctx!.beginPath()
+      ctx!.arc(myScreenX, myScreenY, DOT_RADIUS_ME, 0, Math.PI * 2)
+      ctx!.fill()
+      
+      // White border on me
+      ctx!.strokeStyle = 'white'
+      ctx!.lineWidth = 1
+      ctx!.stroke()
+
+      animationId = requestAnimationFrame(draw)
     }
 
-    // Find bounds
-    let minX = Infinity, maxX = -Infinity
-    let minZ = Infinity, maxZ = -Infinity
-    for (const pos of allPositions) {
-      minX = Math.min(minX, pos.x)
-      maxX = Math.max(maxX, pos.x)
-      minZ = Math.min(minZ, pos.z)
-      maxZ = Math.max(maxZ, pos.z)
+    animationId = requestAnimationFrame(draw)
+
+    return () => {
+      cancelAnimationFrame(animationId)
     }
-
-    // Add padding and ensure minimum range
-    const rangeX = Math.max(maxX - minX, MIN_RANGE)
-    const rangeZ = Math.max(maxZ - minZ, MIN_RANGE)
-    const range = Math.max(rangeX, rangeZ) * 1.2 // 20% padding
-
-    const centerX = (minX + maxX) / 2
-    const centerZ = (minZ + maxZ) / 2
-
-    // Map to percentage positions
-    return allPositions.map(pos => ({
-      x: 50 + ((pos.x - centerX) / range) * 80,
-      y: 50 + ((pos.z - centerZ) / range) * 80,
-      isMe: pos.isMe
-    }))
-  }, [playerPos.x, playerPos.z, otherPlayers])
-
-  // Don't show minimap if alone
-  if (otherPlayers.size === 0) return null
+  }, [])
 
   return (
-    <div className="minimap">
-      <svg width={MINIMAP_SIZE} height={MINIMAP_SIZE} viewBox="0 0 100 100">
-        {/* Background */}
-        <rect x="0" y="0" width="100" height="100" fill="rgba(0,0,0,0.4)" rx="8" />
-        
-        {/* Grid lines */}
-        <line x1="50" y1="10" x2="50" y2="90" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
-        <line x1="10" y1="50" x2="90" y2="50" stroke="rgba(255,255,255,0.1)" strokeWidth="0.5" />
-        
-        {/* Other players (render first so we're on top) */}
-        {dots.filter(d => !d.isMe).map((dot, i) => (
-          <circle
-            key={i}
-            cx={dot.x}
-            cy={dot.y}
-            r="4"
-            fill="#88aaff"
-            opacity="0.8"
-          />
-        ))}
-        
-        {/* Me */}
-        {dots.filter(d => d.isMe).map((dot, i) => (
-          <circle
-            key={`me-${i}`}
-            cx={dot.x}
-            cy={dot.y}
-            r="5"
-            fill="#4ade80"
-            stroke="white"
-            strokeWidth="1"
-          />
-        ))}
-      </svg>
-    </div>
+    <canvas
+      ref={canvasRef}
+      className="minimap"
+      style={{ width: MINIMAP_SIZE, height: MINIMAP_SIZE }}
+    />
   )
 }

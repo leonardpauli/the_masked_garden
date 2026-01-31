@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { useAtomValue } from 'jotai'
 import { Group, Mesh, MeshStandardMaterial, SphereGeometry, Vector3 } from 'three'
+import { gameStore } from '../store'
 import { otherPlayersAtom } from '../store/atoms/onlineAtoms'
 
 // Spring-damper constants for smooth interpolation
@@ -54,7 +54,6 @@ function springDamperUpdate(
 }
 
 export function GhostPlayers() {
-  const otherPlayers = useAtomValue(otherPlayersAtom)
   const ghostsRef = useRef<Map<number, GhostState>>(new Map())
   const groupRef = useRef<Group>(null)
 
@@ -65,6 +64,7 @@ export function GhostPlayers() {
     const dt = Math.min(delta, 0.1)
 
     const ghosts = ghostsRef.current
+    const otherPlayers = gameStore.get(otherPlayersAtom)
 
     // Remove ghosts for players that left
     for (const [id, ghost] of ghosts) {
