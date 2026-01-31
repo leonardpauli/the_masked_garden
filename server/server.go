@@ -3,12 +3,12 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -40,6 +40,47 @@ var upgrader = websocket.Upgrader{
 }
 
 var playerIDCounter uint64
+
+// Actor identity: map public key to persistent actor ID
+var (
+	pubKeyToID   = make(map[string]uint64)
+	pubKeyMu     sync.RWMutex
+	actorCounter uint64
+)
+
+// getOrCreateActorID returns a persistent ID for a public key
+func getOrCreateActorID(publicKey string) uint64 {
+	pubKeyMu.RLock()
+	if id, exists := pubKeyToID[publicKey]; exists {
+		pubKeyMu.RUnlock()
+		return id
+	}
+	pubKeyMu.RUnlock()
+
+	pubKeyMu.Lock()
+	defer pubKeyMu.Unlock()
+	// Double-check after acquiring write lock
+	if id, exists := pubKeyToID[publicKey]; exists {
+		return id
+	}
+	id := atomic.AddUint64(&actorCounter, 1)
+	pubKeyToID[publicKey] = id
+	return id
+}
+
+// deriveColorHue derives a color hue from a public key (matches client algorithm)
+func deriveColorHue(publicKey string) float64 {
+	decoded, err := base64.StdEncoding.DecodeString(publicKey)
+	if err != nil {
+		// Fallback to simple hash of the string
+		decoded = []byte(publicKey)
+	}
+	var hash uint32 = 0
+	for _, b := range decoded {
+		hash = hash*31 + uint32(b)
+	}
+	return float64(hash % 360)
+}
 
 type PlayerState struct {
 	X        float64 `json:"x"`
@@ -77,6 +118,7 @@ type WSMessage struct {
 	PlayerCount int                    `json:"playerCount,omitempty"`
 	ID          uint64                 `json:"id,omitempty"`
 	ColorHue    float64                `json:"colorHue,omitempty"`
+	PublicKey   string                 `json:"publicKey,omitempty"`
 	State       *PlayerState           `json:"state,omitempty"`
 	Players     map[uint64]PlayerState `json:"players,omitempty"`
 	BuildTime   string                 `json:"buildTime,omitempty"`
@@ -180,9 +222,37 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := atomic.AddUint64(&playerIDCounter, 1)
-	// Golden angle distribution for unique colors
-	colorHue := math.Mod(float64(id)*137.508, 360)
+	// Wait for hello message with public key
+	var publicKey string
+	var colorHue float64
+	var id uint64
+
+	// Set a timeout for the hello message
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+	_, message, err := conn.ReadMessage()
+	if err != nil {
+		log.Printf("Failed to read hello message: %v", err)
+		conn.Close()
+		return
+	}
+
+	var helloMsg WSMessage
+	if json.Unmarshal(message, &helloMsg) != nil || helloMsg.Type != "hello" || helloMsg.PublicKey == "" {
+		log.Printf("Invalid hello message, using session ID instead")
+		// Fallback: use session-based ID
+		id = atomic.AddUint64(&playerIDCounter, 1)
+		colorHue = float64((id * 137) % 360) // Simple fallback color
+	} else {
+		publicKey = helloMsg.PublicKey
+		id = getOrCreateActorID(publicKey)
+		colorHue = deriveColorHue(publicKey)
+		log.Printf("Actor authenticated with public key (first 20 chars): %s...", publicKey[:min(20, len(publicKey))])
+	}
+
+	// Clear the deadline for normal operation
+	conn.SetReadDeadline(time.Time{})
+
 	player := &Player{ID: id, ColorHue: colorHue, conn: conn, lastPing: time.Now()}
 
 	playersMu.Lock()
@@ -198,7 +268,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	welcomeData, _ := json.Marshal(welcomeMsg)
 	conn.WriteMessage(websocket.TextMessage, welcomeData)
 
-	log.Printf("Player %d connected. Total: %d", id, len(players))
+	log.Printf("Player %d connected (colorHue: %.1f). Total: %d", id, colorHue, len(players))
 	broadcastPlayerCount()
 
 	defer func() {

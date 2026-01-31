@@ -1,23 +1,38 @@
 import { gameStore } from '../store'
 import { playerCountAtom, wsConnectedAtom, myPlayerIdAtom, otherPlayersAtom, lastBuildTimeAtom, PlayerState } from '../store/atoms/onlineAtoms'
 import { playerPositionAtom, playerVelocityAtom, playerColorHueAtom } from '../store/atoms/playerAtoms'
+import { getOrCreateIdentity, deriveColorHue } from './actorIdentity'
 
 let ws: WebSocket | null = null
 let pingInterval: number | null = null
 let stateInterval: number | null = null
+let currentPublicKey: string | null = null
 
-export function connectWebSocket() {
+export async function connectWebSocket() {
   if (ws?.readyState === WebSocket.OPEN) return
+
+  // Get or create actor identity before connecting
+  const identity = await getOrCreateIdentity()
+  currentPublicKey = identity.publicKey
+
+  // Derive color locally (will be confirmed by server)
+  const localColorHue = deriveColorHue(identity.publicKey)
+  gameStore.set(playerColorHueAtom, localColorHue)
 
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   const url = `${protocol}//${window.location.host}/ws`
-  
+
   ws = new WebSocket(url)
 
   ws.onopen = () => {
     console.log('WebSocket connected')
     gameStore.set(wsConnectedAtom, true)
-    
+
+    // Send hello with public key
+    if (ws && currentPublicKey) {
+      ws.send(JSON.stringify({ type: 'hello', publicKey: currentPublicKey }))
+    }
+
     // Send ping every second
     pingInterval = window.setInterval(() => {
       if (ws?.readyState === WebSocket.OPEN) {
