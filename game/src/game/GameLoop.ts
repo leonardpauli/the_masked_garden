@@ -24,7 +24,8 @@ class GameLoop {
       const state = gameStore.get(gameStateAtom)
       if (state !== 'playing') return
 
-      const [, , z] = gameStore.get(playerPositionAtom)
+      const pos = gameStore.get(playerPositionAtom)
+      const z = pos.z
 
       // Award points for forward progress (negative Z)
       if (z < this.lastZ - 2) {

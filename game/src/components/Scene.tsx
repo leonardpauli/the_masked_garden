@@ -8,6 +8,7 @@ import { ObstacleField } from './ObstacleField'
 import { Ground } from './Ground'
 import { Lighting } from './Lighting'
 import { PostProcessing } from './PostProcessing'
+import { GhostPlayers } from './GhostPlayers'
 import { gravityAtom, visualStyleAtom } from '../store/atoms/configAtoms'
 import { visualStyleConfigs } from '../types/visualStyles'
 
@@ -19,6 +20,7 @@ function PhysicsWorld() {
       <TopDownCamera />
       <Lighting />
       <Player />
+      <GhostPlayers />
       <Ground />
       <ObstacleField count={25} spread={25} />
     </Physics>

@@ -1,5 +1,11 @@
 import { atom } from 'jotai/vanilla'
-import type { Vector3Tuple } from 'three'
 
-export const playerPositionAtom = atom<Vector3Tuple>([0, 0.5, 0])
+export interface Vec3 {
+  x: number
+  y: number
+  z: number
+}
+
+export const playerPositionAtom = atom<Vec3>({ x: 0, y: 0.5, z: 0 })
+export const playerVelocityAtom = atom<Vec3>({ x: 0, y: 0, z: 0 })
 export const playerHealthAtom = atom<number>(100)
