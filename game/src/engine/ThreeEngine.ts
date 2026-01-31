@@ -8,6 +8,7 @@ import { gameStateAtom } from '../store/atoms/gameAtoms'
 import { playerHealthAtom } from '../store/atoms/playerAtoms'
 import { setPlayerPosition, takeDamage } from '../actions/playerActions'
 import { endGame } from '../actions/gameActions'
+import { ParticleSystem } from '../particles/ParticleSystem'
 
 /**
  * Pure Three.js engine - no React dependencies
@@ -34,6 +35,11 @@ export class ThreeEngine {
   private groundLevel = 0.5 // Y position when on ground
   private lastCollisionTime = 0
   private lastTime = 0
+  
+  // Particle system
+  private particleSystem: ParticleSystem
+  private lastFootstepTime = 0
+  private footstepInterval = 0.15 // Emit footstep particles every 150ms when moving
   
   // Materials (for easy style switching)
   private groundMaterial: THREE.MeshStandardMaterial
@@ -75,6 +81,9 @@ export class ThreeEngine {
     this.setupLighting()
     this.loadPlayer()
     this.generateObstacles(25, 25)
+    
+    // Initialize particle system
+    this.particleSystem = new ParticleSystem(this.scene, 500)
 
     // Subscribe to store changes
     this.subscribeToStore()
@@ -232,6 +241,9 @@ export class ThreeEngine {
         const damage = gameStore.get(damageAmountAtom)
         takeDamage(damage)
         
+        // Emit damage particles at collision point
+        this.particleSystem.emit(playerPos, 'damage')
+        
         // Push player away from obstacle
         if (distance > 0.01) {
           const pushStrength = (collisionDistance - distance) + 0.5
@@ -275,6 +287,17 @@ export class ThreeEngine {
       // Simple direct movement - WASD/arrows map directly to world directions
       this.player.position.x += input.x * speed * deltaTime
       this.player.position.z += input.z * speed * deltaTime
+      
+      // Emit footstep particles when moving
+      const isMoving = Math.abs(input.x) > 0.1 || Math.abs(input.z) > 0.1
+      const nowSeconds = now / 1000
+      if (isMoving && nowSeconds - this.lastFootstepTime > this.footstepInterval) {
+        this.lastFootstepTime = nowSeconds
+        this.particleSystem.emit(
+          { x: this.player.position.x, y: 0.1, z: this.player.position.z },
+          'footstep'
+        )
+      }
       
       // Apply gravity
       this.playerVelocity.y -= gravity * deltaTime
@@ -331,6 +354,9 @@ export class ThreeEngine {
       // Camera rotation is set once in constructor, don't change it here
     }
     
+    // Update particle system
+    this.particleSystem.update(deltaTime)
+    
     // Render
     this.renderer.render(this.scene, this.camera)
   }
@@ -368,6 +394,9 @@ export class ThreeEngine {
       this.ground.geometry.dispose()
       this.groundMaterial.dispose()
     }
+    
+    // Dispose particle system
+    this.particleSystem.dispose()
     
     this.playerMaterial.dispose()
     this.renderer.dispose()
