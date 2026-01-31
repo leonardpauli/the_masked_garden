@@ -6,10 +6,52 @@ export const playerSpeedAtom = atom<number>(8)
 export const playerScaleAtom = atom<number>(0.5)
 export const playerDampingAtom = atom<number>(3)
 
-// Camera config
+// Camera config (target values - what sliders control)
 export const cameraDistanceAtom = atom<number>(14)
-export const cameraSmoothingAtom = atom<number>(0.1)
+export const cameraSmoothingAtom = atom<number>(0.1) // For player-following smoothness
 export const cameraViewAngleAtom = atom<number>(43) // 0 = top-down, 70 = third-person
+export const cameraTransitionSpeedAtom = atom<number>(0.05) // For preset/slider transitions
+
+// Camera presets
+export interface CameraPreset {
+  name: string
+  distance: number
+  viewAngle: number
+}
+
+const DEFAULT_PRESETS: CameraPreset[] = [
+  { name: 'Default', distance: 14, viewAngle: 43 },
+  { name: 'Close-up', distance: 8, viewAngle: 55 },
+  { name: 'Overview', distance: 25, viewAngle: 20 },
+]
+
+// Load presets from localStorage or use defaults
+function loadPresets(): CameraPreset[] {
+  try {
+    const stored = localStorage.getItem('cameraPresets')
+    if (stored) {
+      return JSON.parse(stored)
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return DEFAULT_PRESETS
+}
+
+export const cameraPresetsAtom = atom<CameraPreset[]>(loadPresets())
+
+// Derived atom that saves to localStorage on write
+export const cameraPresetsWithPersistAtom = atom(
+  (get) => get(cameraPresetsAtom),
+  (_get, set, newPresets: CameraPreset[]) => {
+    set(cameraPresetsAtom, newPresets)
+    try {
+      localStorage.setItem('cameraPresets', JSON.stringify(newPresets))
+    } catch {
+      // Ignore storage errors
+    }
+  }
+)
 
 // Physics config
 export const gravityAtom = atom<number>(20)

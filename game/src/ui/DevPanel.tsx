@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useAtom } from 'jotai'
 import {
   playerSpeedAtom,
@@ -6,13 +7,22 @@ import {
   cameraDistanceAtom,
   cameraSmoothingAtom,
   cameraViewAngleAtom,
+  cameraTransitionSpeedAtom,
+  cameraPresetsWithPersistAtom,
   gravityAtom,
   collisionCooldownAtom,
   damageAmountAtom,
   devPanelOpenAtom,
   visualStyleAtom,
+  type CameraPreset,
 } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, visualStyleOptions, type VisualStyle } from '../types/visualStyles'
+
+const DEFAULT_PRESETS: CameraPreset[] = [
+  { name: 'Default', distance: 14, viewAngle: 43 },
+  { name: 'Close-up', distance: 8, viewAngle: 55 },
+  { name: 'Overview', distance: 25, viewAngle: 20 },
+]
 
 interface SliderProps {
   label: string
@@ -50,10 +60,37 @@ export function DevPanel() {
   const [cameraDistance, setCameraDistance] = useAtom(cameraDistanceAtom)
   const [cameraSmoothing, setCameraSmoothing] = useAtom(cameraSmoothingAtom)
   const [cameraViewAngle, setCameraViewAngle] = useAtom(cameraViewAngleAtom)
+  const [cameraTransitionSpeed, setCameraTransitionSpeed] = useAtom(cameraTransitionSpeedAtom)
+  const [cameraPresets, setCameraPresets] = useAtom(cameraPresetsWithPersistAtom)
   const [gravity, setGravity] = useAtom(gravityAtom)
   const [collisionCooldown, setCollisionCooldown] = useAtom(collisionCooldownAtom)
   const [damageAmount, setDamageAmount] = useAtom(damageAmountAtom)
   const [visualStyle, setVisualStyle] = useAtom(visualStyleAtom)
+  const [newPresetName, setNewPresetName] = useState('')
+
+  const applyPreset = (preset: CameraPreset) => {
+    setCameraDistance(preset.distance)
+    setCameraViewAngle(preset.viewAngle)
+  }
+
+  const saveCurrentAsPreset = () => {
+    const name = newPresetName.trim() || `Preset ${cameraPresets.length + 1}`
+    const newPreset: CameraPreset = {
+      name,
+      distance: cameraDistance,
+      viewAngle: cameraViewAngle,
+    }
+    setCameraPresets([...cameraPresets, newPreset])
+    setNewPresetName('')
+  }
+
+  const deletePreset = (index: number) => {
+    setCameraPresets(cameraPresets.filter((_, i) => i !== index))
+  }
+
+  const resetPresets = () => {
+    setCameraPresets(DEFAULT_PRESETS)
+  }
 
   return (
     <div className={`dev-panel ${isOpen ? 'open' : 'closed'}`}>
@@ -61,7 +98,7 @@ export function DevPanel() {
         className="dev-panel-toggle"
         onClick={() => setIsOpen(!isOpen)}
       >
-        {isOpen ? '' : '<'} DEV
+        DEV
       </button>
 
       {isOpen && (
@@ -116,6 +153,41 @@ export function DevPanel() {
           />
 
           <h3>Camera</h3>
+          <div className="dev-presets">
+            {cameraPresets.map((preset, index) => (
+              <div key={index} className="dev-preset-row">
+                <button
+                  className="dev-preset-btn"
+                  onClick={() => applyPreset(preset)}
+                  title={`Distance: ${preset.distance}, Angle: ${preset.viewAngle}°`}
+                >
+                  {preset.name}
+                </button>
+                <button
+                  className="dev-preset-delete"
+                  onClick={() => deletePreset(index)}
+                  title="Delete preset"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="dev-preset-save">
+            <input
+              type="text"
+              placeholder="Preset name..."
+              value={newPresetName}
+              onChange={(e) => setNewPresetName(e.target.value)}
+              className="dev-preset-input"
+            />
+            <button className="dev-preset-save-btn" onClick={saveCurrentAsPreset}>
+              Save
+            </button>
+          </div>
+          <button className="dev-reset-btn" onClick={resetPresets}>
+            Reset Presets
+          </button>
           <Slider
             label="Distance"
             value={cameraDistance}
@@ -138,6 +210,14 @@ export function DevPanel() {
             onChange={setCameraSmoothing}
             min={0.01}
             max={1}
+            step={0.01}
+          />
+          <Slider
+            label="Transition"
+            value={cameraTransitionSpeed}
+            onChange={setCameraTransitionSpeed}
+            min={0.01}
+            max={0.3}
             step={0.01}
           />
 
