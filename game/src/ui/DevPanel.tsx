@@ -61,11 +61,19 @@ export function DevPanel() {
         className="dev-panel-toggle"
         onClick={() => setIsOpen(!isOpen)}
       >
-        {isOpen ? '>' : '<'} DEV
+        {isOpen ? '' : '<'} DEV
       </button>
 
       {isOpen && (
         <div className="dev-panel-content">
+          <button
+            className="dev-button"
+            onClick={() => { window.location.hash = '#sound' }}
+            style={{ width: '100%', marginBottom: 12, padding: '8px 12px', background: '#4ecdc4', color: '#1a1a2e', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 500 }}
+          >
+            Sound Workstation
+          </button>
+
           <h3>Visual Style</h3>
           <div className="dev-dropdown">
             <select
