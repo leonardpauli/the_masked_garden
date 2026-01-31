@@ -14,6 +14,7 @@ import {
   collisionCooldownAtom,
   damageAmountAtom,
   visualStyleAtom,
+  healthEnabledAtom,
 } from '../store/atoms/configAtoms'
 import { setPlayerPosition, setPlayerVelocity, takeDamage } from '../actions/playerActions'
 import { endGame } from '../actions/gameActions'
@@ -95,14 +96,21 @@ export function Player() {
     setPlayerPosition({ x: position.x, y: position.y, z: position.z })
     setPlayerVelocity({ x: velocity.x, y: velocity.y, z: velocity.z })
 
-    // Check for game over
-    const health = gameStore.get(playerHealthAtom)
-    if (health <= 0) {
-      endGame()
+    // Check for game over (only if health system is enabled)
+    const healthEnabled = gameStore.get(healthEnabledAtom)
+    if (healthEnabled) {
+      const health = gameStore.get(playerHealthAtom)
+      if (health <= 0) {
+        endGame()
+      }
     }
   })
 
   const handleCollision = () => {
+    // Skip damage if health system is disabled
+    const healthEnabled = gameStore.get(healthEnabledAtom)
+    if (!healthEnabled) return
+
     const now = Date.now()
     const cooldown = gameStore.get(collisionCooldownAtom)
 

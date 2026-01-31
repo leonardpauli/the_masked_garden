@@ -1,11 +1,11 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameStore } from '../store'
-import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, cameraTransitionSpeedAtom, gravityAtom, collisionCooldownAtom, damageAmountAtom } from '../store/atoms/configAtoms'
+import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, cameraTransitionSpeedAtom, gravityAtom, collisionCooldownAtom, damageAmountAtom, treeColorVariationAtom, groundVibranceAtom } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, type VisualStyleConfig } from '../types/visualStyles'
 import { inputDirectionAtom } from '../store/atoms/inputAtoms'
 import { gameStateAtom } from '../store/atoms/gameAtoms'
-import { playerHealthAtom } from '../store/atoms/playerAtoms'
+import { playerHealthAtom, playerColorHueAtom } from '../store/atoms/playerAtoms'
 import { setPlayerPosition, takeDamage } from '../actions/playerActions'
 import { endGame } from '../actions/gameActions'
 import { ParticleSystem } from '../particles/ParticleSystem'
@@ -23,9 +23,11 @@ export class ThreeEngine {
   
   // Scene objects
   private ground: THREE.Mesh | null = null
-  private obstacles: THREE.Mesh[] = []
+  private obstacles: THREE.Object3D[] = []
   private obstacleRadii: number[] = [] // Store collision radii for each obstacle
   private player: THREE.Group | null = null
+  private trunkTemplate: THREE.Group | null = null
+  private leavesTemplate: THREE.Group | null = null
   private ambientLight: THREE.AmbientLight | null = null
   private directionalLight: THREE.DirectionalLight | null = null
   
@@ -47,7 +49,6 @@ export class ThreeEngine {
   
   // Materials (for easy style switching)
   private groundMaterial: THREE.MeshStandardMaterial
-  private obstacleMaterials: THREE.MeshStandardMaterial[] = []
   private playerMaterial: THREE.MeshToonMaterial
 
   constructor(container: HTMLElement) {
@@ -115,12 +116,6 @@ export class ThreeEngine {
 
     // Player
     this.playerMaterial.color.set(config.playerColor)
-
-    // Obstacles - update colors based on style palette
-    this.obstacleMaterials.forEach((material, index) => {
-      const colorIndex = index % config.obstacleColors.length
-      material.color.set(config.obstacleColors[colorIndex])
-    })
   }
 
   private setupScene(): void {
@@ -153,58 +148,153 @@ export class ThreeEngine {
     this.scene.add(this.directionalLight)
   }
 
+  // Convert HSL to THREE.Color
+  private hslToColor(h: number, s: number, l: number): THREE.Color {
+    s /= 100
+    l /= 100
+    const a = s * Math.min(l, 1 - l)
+    const f = (n: number) => {
+      const k = (n + h / 30) % 12
+      return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+    }
+    return new THREE.Color(f(0), f(8), f(4))
+  }
+
+  private bodyMaterial: THREE.MeshStandardMaterial | null = null
+
   private loadPlayer(): void {
     const loader = new GLTFLoader()
-    loader.load('/models/player.glb', (gltf) => {
-      this.player = gltf.scene
-      this.player.scale.setScalar(0.5)
-      this.player.position.set(0, 0.5, 0)
-      
-      // Apply toon material to all meshes
-      this.player.traverse((child) => {
+
+    // Random skin color (Fitzpatrick scale - realistic human skin tones)
+    const skinColors = [
+      '#FFDFC4', '#F0D5BE', '#EECEB3', '#E1B899',  // Light
+      '#D4A574', '#C68642', '#BA7D52', '#A67B5B',  // Medium
+      '#8D5524', '#6B4423', '#4A3728', '#3B2F2F'   // Dark
+    ]
+    const skinColor = skinColors[Math.floor(Math.random() * skinColors.length)]
+
+    // Create parent group for player
+    this.player = new THREE.Group()
+    this.player.scale.setScalar(0.5)
+    this.player.position.set(0, 0.5, 0)
+    this.scene.add(this.player)
+
+    // Load head with skin color
+    loader.load('/models/player/charHead.glb', (gltf) => {
+      const head = gltf.scene
+      head.traverse((child) => {
         if (child instanceof THREE.Mesh) {
-          child.material = this.playerMaterial
+          child.material = new THREE.MeshStandardMaterial({ color: skinColor })
           child.castShadow = true
           child.receiveShadow = true
         }
       })
-      
-      this.scene.add(this.player)
+      this.player!.add(head)
+    })
+
+    // Load body with unique color from server (golden angle hue)
+    loader.load('/models/player/charBody.glb', (gltf) => {
+      const body = gltf.scene
+      const colorHue = gameStore.get(playerColorHueAtom)
+      this.bodyMaterial = new THREE.MeshStandardMaterial({
+        color: this.hslToColor(colorHue, 70, 55)
+      })
+
+      body.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.material = this.bodyMaterial!
+          child.castShadow = true
+          child.receiveShadow = true
+        }
+      })
+      this.player!.add(body)
+
+      // Subscribe to color changes (in case it updates after load)
+      const unsubColor = gameStore.sub(playerColorHueAtom, () => {
+        const hue = gameStore.get(playerColorHueAtom)
+        if (this.bodyMaterial) {
+          this.bodyMaterial.color = this.hslToColor(hue, 70, 55)
+        }
+      })
+      this.unsubscribers.push(unsubColor)
     })
   }
 
   private generateObstacles(count: number, spread: number): void {
-    const config = visualStyleConfigs[gameStore.get(visualStyleAtom)]
-    
-    for (let i = 0; i < count; i++) {
-      // Random position, avoid center
-      let x: number, z: number
-      do {
-        x = (Math.random() - 0.5) * spread * 2
-        z = (Math.random() - 0.5) * spread * 2
-      } while (Math.abs(x) < 3 && Math.abs(z) < 3)
+    const loader = new GLTFLoader()
 
-      const scale = 0.5 + Math.random() * 0.8
-      const colorIndex = Math.floor(Math.random() * config.obstacleColors.length)
-      
-      // Create icosahedron
-      const geometry = new THREE.IcosahedronGeometry(scale, 0)
-      const material = new THREE.MeshStandardMaterial({
-        color: config.obstacleColors[colorIndex],
-        roughness: 0.4,
-        metalness: 0.1
-      })
-      
-      const mesh = new THREE.Mesh(geometry, material)
-      mesh.position.set(x, scale, z)
-      mesh.castShadow = true
-      mesh.receiveShadow = true
-      
-      this.obstacles.push(mesh)
-      this.obstacleRadii.push(scale) // Store the radius for collision detection
-      this.obstacleMaterials.push(material)
-      this.scene.add(mesh)
+    // Load trunk and leaves templates
+    let trunkLoaded = false
+    let leavesLoaded = false
+
+    const tryCreateTrees = () => {
+      if (!trunkLoaded || !leavesLoaded) return
+      if (!this.trunkTemplate || !this.leavesTemplate) return
+
+      const variation = gameStore.get(treeColorVariationAtom)
+
+      for (let i = 0; i < count; i++) {
+        // Random position, avoid center
+        let x: number, z: number
+        do {
+          x = (Math.random() - 0.5) * spread * 2
+          z = (Math.random() - 0.5) * spread * 2
+        } while (Math.abs(x) < 3 && Math.abs(z) < 3)
+
+        const scale = 0.5 + Math.random() * 0.8
+
+        // Create tree group
+        const tree = new THREE.Group()
+        tree.position.set(x, 0, z)
+        tree.scale.setScalar(scale)
+
+        // Clone trunk with varied brown color
+        const trunk = this.trunkTemplate.clone()
+        const trunkHue = 30 + (Math.random() - 0.5) * variation * 30  // Brown with variation
+        const trunkMaterial = new THREE.MeshStandardMaterial({
+          color: this.hslToColor(trunkHue, 40, 35)
+        })
+        trunk.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.material = trunkMaterial
+            child.castShadow = true
+            child.receiveShadow = true
+          }
+        })
+        tree.add(trunk)
+
+        // Clone leaves with varied green color
+        const leaves = this.leavesTemplate.clone()
+        const leavesHue = 120 + (Math.random() - 0.5) * variation * 40  // Green with variation
+        const leavesMaterial = new THREE.MeshStandardMaterial({
+          color: this.hslToColor(leavesHue, 55, 45)
+        })
+        leaves.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.material = leavesMaterial
+            child.castShadow = true
+            child.receiveShadow = true
+          }
+        })
+        tree.add(leaves)
+
+        this.obstacles.push(tree)
+        this.obstacleRadii.push(scale)
+        this.scene.add(tree)
+      }
     }
+
+    loader.load('/models/foliage/treeTrunk.glb', (gltf) => {
+      this.trunkTemplate = gltf.scene
+      trunkLoaded = true
+      tryCreateTrees()
+    })
+
+    loader.load('/models/foliage/treeLeaves.glb', (gltf) => {
+      this.leavesTemplate = gltf.scene
+      leavesLoaded = true
+      tryCreateTrees()
+    })
   }
 
   private subscribeToStore(): void {
@@ -214,6 +304,16 @@ export class ThreeEngine {
       this.applyVisualStyle(visualStyleConfigs[style])
     })
     this.unsubscribers.push(unsubVisualStyle)
+
+    // Subscribe to ground vibrance changes
+    const unsubGroundVibrance = gameStore.sub(groundVibranceAtom, () => {
+      const vibrance = gameStore.get(groundVibranceAtom)
+      const hue = 100 + vibrance * 20        // 100 → 120
+      const saturation = 20 + vibrance * 80  // 20% → 100%
+      const lightness = 25 + vibrance * 25   // 25% → 50%
+      this.groundMaterial.color = this.hslToColor(hue, saturation, lightness)
+    })
+    this.unsubscribers.push(unsubGroundVibrance)
   }
 
   private checkObstacleCollisions(): void {
@@ -405,9 +505,15 @@ export class ThreeEngine {
     window.removeEventListener('resize', this.handleResize)
     
     // Dispose of Three.js resources
-    this.obstacles.forEach(mesh => {
-      mesh.geometry.dispose()
-      ;(mesh.material as THREE.Material).dispose()
+    this.obstacles.forEach(obj => {
+      obj.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose()
+          if (child.material instanceof THREE.Material) {
+            child.material.dispose()
+          }
+        }
+      })
     })
     
     if (this.ground) {
@@ -438,7 +544,7 @@ export class ThreeEngine {
     return this.player
   }
 
-  getObstacles(): THREE.Mesh[] {
+  getObstacles(): THREE.Object3D[] {
     return this.obstacles
   }
 }

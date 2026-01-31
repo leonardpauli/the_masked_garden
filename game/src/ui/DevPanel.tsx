@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAtom } from 'jotai'
+import { useMemo } from 'react'
 import {
   playerSpeedAtom,
   playerScaleAtom,
@@ -14,6 +15,10 @@ import {
   damageAmountAtom,
   devPanelOpenAtom,
   visualStyleAtom,
+  healthEnabledAtom,
+  scoreEnabledAtom,
+  treeColorVariationAtom,
+  groundVibranceAtom,
   type CameraPreset,
 } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, visualStyleOptions, type VisualStyle } from '../types/visualStyles'
@@ -52,6 +57,40 @@ function Slider({ label, value, onChange, min, max, step = 0.1 }: SliderProps) {
   )
 }
 
+interface CheckboxProps {
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}
+
+function Checkbox({ label, checked, onChange }: CheckboxProps) {
+  return (
+    <div className="dev-checkbox">
+      <label>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span className="dev-checkbox-label">{label}</span>
+      </label>
+    </div>
+  )
+}
+
+// Convert HSL to hex color
+function hslToHex(h: number, s: number, l: number): string {
+  s /= 100
+  l /= 100
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+  }
+  const toHex = (x: number) => Math.round(x * 255).toString(16).padStart(2, '0')
+  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`
+}
+
 export function DevPanel() {
   const [isOpen, setIsOpen] = useAtom(devPanelOpenAtom)
   const [playerSpeed, setPlayerSpeed] = useAtom(playerSpeedAtom)
@@ -66,7 +105,19 @@ export function DevPanel() {
   const [collisionCooldown, setCollisionCooldown] = useAtom(collisionCooldownAtom)
   const [damageAmount, setDamageAmount] = useAtom(damageAmountAtom)
   const [visualStyle, setVisualStyle] = useAtom(visualStyleAtom)
+  const [healthEnabled, setHealthEnabled] = useAtom(healthEnabledAtom)
+  const [scoreEnabled, setScoreEnabled] = useAtom(scoreEnabledAtom)
+  const [treeColorVariation, setTreeColorVariation] = useAtom(treeColorVariationAtom)
+  const [groundVibrance, setGroundVibrance] = useAtom(groundVibranceAtom)
   const [newPresetName, setNewPresetName] = useState('')
+
+  // Compute ground color hex from vibrance
+  const groundColorHex = useMemo(() => {
+    const hue = 100 + groundVibrance * 20        // 100 → 120
+    const saturation = 20 + groundVibrance * 80  // 20% → 100%
+    const lightness = 25 + groundVibrance * 25   // 25% → 50%
+    return hslToHex(hue, saturation, lightness)
+  }, [groundVibrance])
 
   const applyPreset = (preset: CameraPreset) => {
     setCameraDistance(preset.distance)
@@ -248,6 +299,40 @@ export function DevPanel() {
             max={2000}
             step={50}
           />
+
+          <h3>Game Systems</h3>
+          <Checkbox
+            label="Health System"
+            checked={healthEnabled}
+            onChange={setHealthEnabled}
+          />
+          <Checkbox
+            label="Score System"
+            checked={scoreEnabled}
+            onChange={setScoreEnabled}
+          />
+
+          <h3>Environment</h3>
+          <Slider
+            label="Tree Variation"
+            value={treeColorVariation}
+            onChange={setTreeColorVariation}
+            min={0}
+            max={10}
+            step={0.01}
+          />
+          <Slider
+            label="Ground Vibrance"
+            value={groundVibrance}
+            onChange={setGroundVibrance}
+            min={0}
+            max={1}
+            step={0.01}
+          />
+          <div className="dev-hex-display">
+            <span>Ground Color: </span>
+            <span className="hex-value" style={{ color: groundColorHex }}>{groundColorHex}</span>
+          </div>
         </div>
       )}
     </div>

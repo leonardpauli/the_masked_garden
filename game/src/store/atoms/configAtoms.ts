@@ -60,8 +60,18 @@ export const gravityAtom = atom<number>(20)
 export const collisionCooldownAtom = atom<number>(500)
 export const damageAmountAtom = atom<number>(10)
 
+// Game system toggles (default: OFF)
+export const healthEnabledAtom = atom<boolean>(false)
+export const scoreEnabledAtom = atom<boolean>(false)
+
 // Visual style config
 export const visualStyleAtom = atom<VisualStyle>('default')
+
+// Tree colors
+export const treeColorVariationAtom = atom<number>(1) // 0-1 range
+
+// Ground color (0 = dull grey-green, 1 = neon green)
+export const groundVibranceAtom = atom<number>(0)
 
 // Dev panel visibility
 export const devPanelOpenAtom = atom<boolean>(true)
