@@ -1,9 +1,12 @@
 import { gameStore } from '../store'
-import { playerPositionAtom, playerHealthAtom } from '../store/atoms/playerAtoms'
-import type { Vector3Tuple } from 'three'
+import { playerPositionAtom, playerVelocityAtom, playerHealthAtom, Vec3 } from '../store/atoms/playerAtoms'
 
-export function setPlayerPosition(position: Vector3Tuple): void {
+export function setPlayerPosition(position: Vec3): void {
   gameStore.set(playerPositionAtom, position)
+}
+
+export function setPlayerVelocity(velocity: Vec3): void {
+  gameStore.set(playerVelocityAtom, velocity)
 }
 
 export function takeDamage(amount: number): void {
@@ -19,6 +22,7 @@ export function healPlayer(amount: number): void {
 }
 
 export function resetPlayer(): void {
-  gameStore.set(playerPositionAtom, [0, 0.5, 0])
+  gameStore.set(playerPositionAtom, { x: 0, y: 0.5, z: 0 })
+  gameStore.set(playerVelocityAtom, { x: 0, y: 0, z: 0 })
   gameStore.set(playerHealthAtom, 100)
 }

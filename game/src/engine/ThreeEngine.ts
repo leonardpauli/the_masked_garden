@@ -324,11 +324,11 @@ export class ThreeEngine {
       this.checkObstacleCollisions()
       
       // Update player position in store
-      setPlayerPosition([
-        this.player.position.x,
-        this.player.position.y,
-        this.player.position.z
-      ])
+      setPlayerPosition({
+        x: this.player.position.x,
+        y: this.player.position.y,
+        z: this.player.position.z
+      })
       
       // Check for game over
       const health = gameStore.get(playerHealthAtom)

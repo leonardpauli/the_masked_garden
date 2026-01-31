@@ -8,6 +8,8 @@ class GyroInput {
   private hasPermission = false
   private initialized = false
   private sensitivity = 0.04
+  private referenceGamma: number | null = null
+  private referenceBeta: number | null = null
 
   async requestPermission(): Promise<boolean> {
     const DeviceOrientationEventTyped = DeviceOrientationEvent as unknown as DeviceOrientationEventiOS & {
@@ -38,20 +40,34 @@ class GyroInput {
     if (this.initialized) return
     this.initialized = true
 
+    // Reset reference point - will be captured on first orientation event
+    this.referenceGamma = null
+    this.referenceBeta = null
+
     window.addEventListener('deviceorientation', this.handleOrientation)
   }
 
   private handleOrientation = (e: DeviceOrientationEvent): void => {
     if (e.beta === null || e.gamma === null) return
 
+    // Capture reference point on first reading
+    if (this.referenceGamma === null || this.referenceBeta === null) {
+      this.referenceGamma = e.gamma
+      this.referenceBeta = e.beta
+      return
+    }
+
     setInputSource('gyro')
 
     // gamma: left/right tilt (-90 to 90)
     // beta: front/back tilt (-180 to 180)
+    // Use relative values from reference point
+    const deltaGamma = e.gamma - this.referenceGamma
+    const deltaBeta = e.beta - this.referenceBeta
 
     // Convert to -1 to 1 range with deadzone
-    let x = this.applyDeadzone(e.gamma * this.sensitivity)
-    let z = this.applyDeadzone((e.beta - 45) * this.sensitivity) // Offset for natural holding angle
+    let x = this.applyDeadzone(deltaGamma * this.sensitivity)
+    let z = this.applyDeadzone(deltaBeta * this.sensitivity)
 
     // Clamp values
     x = Math.max(-1, Math.min(1, x))
@@ -65,10 +81,18 @@ class GyroInput {
     return value
   }
 
+  recalibrate(): void {
+    // Reset reference point - will be recaptured on next orientation event
+    this.referenceGamma = null
+    this.referenceBeta = null
+  }
+
   destroy(): void {
     window.removeEventListener('deviceorientation', this.handleOrientation)
     this.initialized = false
     this.hasPermission = false
+    this.referenceGamma = null
+    this.referenceBeta = null
   }
 }
 

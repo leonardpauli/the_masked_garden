@@ -20,7 +20,7 @@ export function TopDownCamera() {
     const smoothing = gameStore.get(cameraSmoothingAtom)
 
     // Target position is directly above player (pure top-down)
-    targetPosition.current.set(playerPos[0], cameraHeight, playerPos[2])
+    targetPosition.current.set(playerPos.x, cameraHeight, playerPos.z)
 
     // Smooth camera movement
     camera.position.lerp(targetPosition.current, smoothing)

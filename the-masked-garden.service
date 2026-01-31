@@ -1,0 +1,18 @@
+[Unit]
+Description=The Masked Garden Production Server
+After=network.target
+
+[Service]
+Type=simple
+User=exedev
+WorkingDirectory=/home/exedev/the_masked_garden/server
+Environment=PORT=8000
+Environment=WEBHOOK_SECRET=1a835d22095b62fd5805a12859f8f7d6f819f882
+Environment=DIST_DIR=/home/exedev/the_masked_garden/game/dist
+Environment=REPO_DIR=/home/exedev/the_masked_garden
+ExecStart=/home/exedev/the_masked_garden/server/server
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
