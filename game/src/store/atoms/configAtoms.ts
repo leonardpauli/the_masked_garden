@@ -73,5 +73,29 @@ export const treeColorVariationAtom = atom<number>(1) // 0-1 range
 // Ground color (0 = dull grey-green, 1 = neon green)
 export const groundVibranceAtom = atom<number>(0)
 
-// Dev panel visibility
-export const devPanelOpenAtom = atom<boolean>(true)
+// Dev panel visibility (persisted to localStorage, default closed)
+function loadDevPanelOpen(): boolean {
+  try {
+    const stored = localStorage.getItem('devPanelOpen')
+    if (stored !== null) {
+      return JSON.parse(stored)
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return false // Default to closed
+}
+
+const devPanelOpenBaseAtom = atom<boolean>(loadDevPanelOpen())
+
+export const devPanelOpenAtom = atom(
+  (get) => get(devPanelOpenBaseAtom),
+  (_get, set, newValue: boolean) => {
+    set(devPanelOpenBaseAtom, newValue)
+    try {
+      localStorage.setItem('devPanelOpen', JSON.stringify(newValue))
+    } catch {
+      // Ignore storage errors
+    }
+  }
+)
