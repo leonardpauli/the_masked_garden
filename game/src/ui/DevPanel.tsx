@@ -3,8 +3,9 @@ import {
   playerSpeedAtom,
   playerScaleAtom,
   playerDampingAtom,
-  cameraHeightAtom,
+  cameraDistanceAtom,
   cameraSmoothingAtom,
+  cameraViewAngleAtom,
   gravityAtom,
   collisionCooldownAtom,
   damageAmountAtom,
@@ -46,8 +47,9 @@ export function DevPanel() {
   const [playerSpeed, setPlayerSpeed] = useAtom(playerSpeedAtom)
   const [playerScale, setPlayerScale] = useAtom(playerScaleAtom)
   const [playerDamping, setPlayerDamping] = useAtom(playerDampingAtom)
-  const [cameraHeight, setCameraHeight] = useAtom(cameraHeightAtom)
+  const [cameraDistance, setCameraDistance] = useAtom(cameraDistanceAtom)
   const [cameraSmoothing, setCameraSmoothing] = useAtom(cameraSmoothingAtom)
+  const [cameraViewAngle, setCameraViewAngle] = useAtom(cameraViewAngleAtom)
   const [gravity, setGravity] = useAtom(gravityAtom)
   const [collisionCooldown, setCollisionCooldown] = useAtom(collisionCooldownAtom)
   const [damageAmount, setDamageAmount] = useAtom(damageAmountAtom)
@@ -107,11 +109,19 @@ export function DevPanel() {
 
           <h3>Camera</h3>
           <Slider
-            label="Height"
-            value={cameraHeight}
-            onChange={setCameraHeight}
+            label="Distance"
+            value={cameraDistance}
+            onChange={setCameraDistance}
             min={5}
             max={50}
+            step={1}
+          />
+          <Slider
+            label="View Angle"
+            value={cameraViewAngle}
+            onChange={setCameraViewAngle}
+            min={0}
+            max={70}
             step={1}
           />
           <Slider

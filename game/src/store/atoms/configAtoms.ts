@@ -7,8 +7,9 @@ export const playerScaleAtom = atom<number>(0.5)
 export const playerDampingAtom = atom<number>(3)
 
 // Camera config
-export const cameraHeightAtom = atom<number>(20)
+export const cameraDistanceAtom = atom<number>(14)
 export const cameraSmoothingAtom = atom<number>(0.1)
+export const cameraViewAngleAtom = atom<number>(43) // 0 = top-down, 70 = third-person
 
 // Physics config
 export const gravityAtom = atom<number>(20)

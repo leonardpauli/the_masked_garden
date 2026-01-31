@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameStore } from '../store'
-import { visualStyleAtom, playerSpeedAtom, cameraHeightAtom, cameraSmoothingAtom, gravityAtom, collisionCooldownAtom, damageAmountAtom } from '../store/atoms/configAtoms'
+import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, gravityAtom, collisionCooldownAtom, damageAmountAtom } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, type VisualStyleConfig } from '../types/visualStyles'
 import { inputDirectionAtom } from '../store/atoms/inputAtoms'
 import { gameStateAtom } from '../store/atoms/gameAtoms'
@@ -66,8 +66,7 @@ export class ThreeEngine {
       1000
     )
     this.camera.position.set(0, 20, 0)
-    // Set fixed rotation to look straight down (rotate -90 degrees on X axis)
-    this.camera.rotation.set(-Math.PI / 2, 0, 0)
+    // Initial rotation will be set by lookAt in animate loop
 
     // Initialize materials
     this.groundMaterial = new THREE.MeshStandardMaterial({ color: '#3a5a3a' })
@@ -339,19 +338,31 @@ export class ThreeEngine {
     
     // Update camera to follow player
     if (this.player) {
-      const cameraHeight = gameStore.get(cameraHeightAtom)
+      const distance = gameStore.get(cameraDistanceAtom)
       const smoothing = gameStore.get(cameraSmoothingAtom)
-      
-      // Smooth camera follow - only position, not rotation
+      const viewAngle = gameStore.get(cameraViewAngleAtom)
+
+      // Convert angle to radians
+      const angleRad = (viewAngle * Math.PI) / 180
+
+      // Calculate camera position based on view angle
+      // At 0 degrees: camera directly above (top-down)
+      // At 70 degrees: camera behind player (third-person)
+      const height = distance * Math.cos(angleRad)
+      const zOffset = distance * Math.sin(angleRad)
+
+      // Target position: above and behind player
       const targetX = this.player.position.x
-      const targetZ = this.player.position.z
-      
+      const targetY = this.player.position.y + height
+      const targetZ = this.player.position.z + zOffset
+
+      // Smooth camera movement
       this.camera.position.x += (targetX - this.camera.position.x) * smoothing
+      this.camera.position.y += (targetY - this.camera.position.y) * smoothing
       this.camera.position.z += (targetZ - this.camera.position.z) * smoothing
-      this.camera.position.y = cameraHeight
-      
-      // Fixed camera angle - look straight down (no angle change)
-      // Camera rotation is set once in constructor, don't change it here
+
+      // Fixed rotation based on view angle (no left/right turning)
+      this.camera.rotation.set(-Math.PI / 2 + angleRad, 0, 0)
     }
     
     // Update particle system
