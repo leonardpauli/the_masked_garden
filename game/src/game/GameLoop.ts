@@ -1,6 +1,7 @@
 import { gameStore } from '../store'
 import { gameStateAtom, scoreAtom } from '../store/atoms/gameAtoms'
 import { playerPositionAtom } from '../store/atoms/playerAtoms'
+import { scoreEnabledAtom } from '../store/atoms/configAtoms'
 
 class GameLoop {
   private unsubscribers: (() => void)[] = []
@@ -24,6 +25,10 @@ class GameLoop {
       const state = gameStore.get(gameStateAtom)
       if (state !== 'playing') return
 
+      // Skip score if score system is disabled
+      const scoreEnabled = gameStore.get(scoreEnabledAtom)
+      if (!scoreEnabled) return
+
       const pos = gameStore.get(playerPositionAtom)
       const z = pos.z
 
@@ -43,7 +48,8 @@ class GameLoop {
     // Award survival points every second
     this.scoreInterval = window.setInterval(() => {
       const state = gameStore.get(gameStateAtom)
-      if (state === 'playing') {
+      const scoreEnabled = gameStore.get(scoreEnabledAtom)
+      if (state === 'playing' && scoreEnabled) {
         const currentScore = gameStore.get(scoreAtom)
         gameStore.set(scoreAtom, currentScore + 1)
       }

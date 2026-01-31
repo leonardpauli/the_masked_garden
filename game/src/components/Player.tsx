@@ -2,11 +2,10 @@ import { useRef, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { RigidBody, RapierRigidBody } from '@react-three/rapier'
-import { MeshToonMaterial, Mesh } from 'three'
+import { Mesh } from 'three'
 import { gameStore } from '../store'
 import { inputDirectionAtom } from '../store/atoms/inputAtoms'
 import { gameStateAtom } from '../store/atoms/gameAtoms'
-import { playerHealthAtom } from '../store/atoms/playerAtoms'
 import {
   playerSpeedAtom,
   playerScaleAtom,
@@ -14,29 +13,40 @@ import {
   collisionCooldownAtom,
   damageAmountAtom,
   visualStyleAtom,
+  healthEnabledAtom,
 } from '../store/atoms/configAtoms'
 import { setPlayerPosition, setPlayerVelocity, takeDamage } from '../actions/playerActions'
-import { endGame } from '../actions/gameActions'
 import { visualStyleConfigs } from '../types/visualStyles'
+import { CapeMaterial } from '../materials/CapeMaterial'
 
 export function Player() {
   const rigidBodyRef = useRef<RapierRigidBody>(null)
   const lastCollisionTime = useRef(0)
+  const capeMaterialRef = useRef<CapeMaterial | null>(null)
   const { scene } = useGLTF('/models/player.glb')
 
-  // Apply toon material to all meshes in the model, updating when visual style changes
+  // Apply cape material to all meshes in the model, updating when visual style changes
   useEffect(() => {
     const updateMaterial = () => {
       const visualStyle = gameStore.get(visualStyleAtom)
       const config = visualStyleConfigs[visualStyle]
-      
-      const toonMaterial = new MeshToonMaterial({
-        color: config.playerColor,
-      })
+
+      // Create or update the cape material
+      if (!capeMaterialRef.current) {
+        capeMaterialRef.current = new CapeMaterial({
+          color: config.playerColor,
+          lagWeight: 0.08,
+          displacementStrength: 0.15,
+          effectStartY: 0.3,
+          effectEndY: -1.0,
+        })
+      } else {
+        capeMaterialRef.current.setColor(config.playerColor)
+      }
 
       scene.traverse((child) => {
         if (child instanceof Mesh) {
-          child.material = toonMaterial
+          child.material = capeMaterialRef.current!
           child.castShadow = true
           child.receiveShadow = true
         }
@@ -44,16 +54,23 @@ export function Player() {
     }
 
     updateMaterial()
-    
+
     // Subscribe to visual style changes
     const unsubscribe = gameStore.sub(visualStyleAtom, updateMaterial)
     return () => unsubscribe()
   }, [scene])
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!rigidBodyRef.current) return
 
     const gameState = gameStore.get(gameStateAtom)
+
+    // Always update cape material for smooth animation, even when paused
+    const velocity = rigidBodyRef.current.linvel()
+    if (capeMaterialRef.current) {
+      capeMaterialRef.current.update(velocity, delta)
+    }
+
     if (gameState !== 'playing') return
 
     // Get config values
@@ -74,18 +91,15 @@ export function Player() {
 
     // Sync position and velocity to atoms
     const position = rigidBodyRef.current.translation()
-    const velocity = rigidBodyRef.current.linvel()
     setPlayerPosition({ x: position.x, y: position.y, z: position.z })
     setPlayerVelocity({ x: velocity.x, y: velocity.y, z: velocity.z })
-
-    // Check for game over
-    const health = gameStore.get(playerHealthAtom)
-    if (health <= 0) {
-      endGame()
-    }
   })
 
   const handleCollision = () => {
+    // Skip damage if health system is disabled
+    const healthEnabled = gameStore.get(healthEnabledAtom)
+    if (!healthEnabled) return
+
     const now = Date.now()
     const cooldown = gameStore.get(collisionCooldownAtom)
 

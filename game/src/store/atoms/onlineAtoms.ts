@@ -7,6 +7,7 @@ export interface PlayerState {
   vx: number
   vy: number
   vz: number
+  colorHue: number
 }
 
 export const playerCountAtom = atom(0)

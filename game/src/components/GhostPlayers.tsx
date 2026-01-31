@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Group, Mesh, MeshStandardMaterial, SphereGeometry, Vector3 } from 'three'
+import { Group, Mesh, MeshStandardMaterial, SphereGeometry, Vector3, Color } from 'three'
 import { gameStore } from '../store'
 import { otherPlayersAtom } from '../store/atoms/onlineAtoms'
 
@@ -18,6 +18,19 @@ interface GhostState {
   // Target state (from server)
   targetPosition: Vector3
   targetVelocity: Vector3
+  colorHue: number
+}
+
+// Convert HSL to RGB Color
+function hslToColor(h: number, s: number, l: number): Color {
+  s /= 100
+  l /= 100
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+  }
+  return new Color(f(0), f(8), f(4))
 }
 
 // Apply spring-damper physics to smoothly move toward target
@@ -81,13 +94,16 @@ export function GhostPlayers() {
       let ghost = ghosts.get(id)
 
       if (!ghost) {
-        // Create new ghost mesh
+        // Create new ghost mesh with unique color from golden angle hue
+        const playerColor = hslToColor(state.colorHue, 70, 55)
+        const emissiveColor = hslToColor(state.colorHue, 50, 35)
+
         const geometry = new SphereGeometry(0.5, 16, 16)
         const material = new MeshStandardMaterial({
-          color: 0x88aaff,
+          color: playerColor,
           transparent: true,
           opacity: 0.5,
-          emissive: 0x4466aa,
+          emissive: emissiveColor,
           emissiveIntensity: 0.4,
         })
         const mesh = new Mesh(geometry, material)
@@ -101,9 +117,10 @@ export function GhostPlayers() {
           velocity: new Vector3(state.vx, state.vy, state.vz),
           targetPosition: new Vector3(state.x, state.y, state.z),
           targetVelocity: new Vector3(state.vx, state.vy, state.vz),
+          colorHue: state.colorHue,
         }
         ghosts.set(id, ghost)
-        
+
         // Set initial position
         mesh.position.copy(ghost.position)
       }

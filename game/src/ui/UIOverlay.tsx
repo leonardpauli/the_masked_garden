@@ -11,7 +11,7 @@ import { Minimap } from './Minimap'
 
 export function UIOverlay() {
   const gameState = useAtomValue(gameStateAtom)
-  const isDev = import.meta.env.DEV
+  // const isDev = import.meta.env.DEV
 
   return (
     <div className="ui-overlay">
@@ -28,7 +28,8 @@ export function UIOverlay() {
 
       <GyroPermission />
 
-      {isDev && <DevPanel />}
+      {/* {isDev && <DevPanel />} */}
+      <DevPanel />
 
       <PlayerCount />
       <Minimap />
