@@ -39,7 +39,6 @@ export function TouchJumpOverlay() {
       style={{
         position: 'absolute',
         inset: 0,
-        zIndex: 1, // Above canvas, below UI
         touchAction: 'none',
       }}
     />
