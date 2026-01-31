@@ -408,3 +408,14 @@
   background: #f87171;
   box-shadow: 0 0 6px #f87171;
 }
+
+/* Minimap */
+.minimap {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+}

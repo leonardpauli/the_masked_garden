@@ -7,6 +7,7 @@ import { GameOverScreen } from './GameOverScreen'
 import { GyroPermission } from './GyroPermission'
 import { DevPanel } from './DevPanel'
 import { PlayerCount } from './PlayerCount'
+import { Minimap } from './Minimap'
 
 export function UIOverlay() {
   const gameState = useAtomValue(gameStateAtom)
@@ -30,6 +31,7 @@ export function UIOverlay() {
       {isDev && <DevPanel />}
 
       <PlayerCount />
+      <Minimap />
     </div>
   )
 }
