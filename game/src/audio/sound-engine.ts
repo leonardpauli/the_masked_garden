@@ -183,6 +183,20 @@ class SoundEngine {
     return this.context?.sampleRate ?? 44100
   }
 
+  /**
+   * Get audio context (for EffectGraph creation)
+   */
+  getContext(): AudioContext | null {
+    return this.context
+  }
+
+  /**
+   * Get master gain node (for connecting effect graphs)
+   */
+  getMasterGain(): GainNode | null {
+    return this.masterGain
+  }
+
   // ========================
   // VISUALIZATION
   // ========================

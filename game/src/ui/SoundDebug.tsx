@@ -4,12 +4,25 @@ import {
   type PlayingSound,
   type LoadedSample,
   type OscillatorType,
+  EffectGraph,
+  effectsRegistry,
+  type EffectId,
 } from '../audio'
 import { presets, presetsByCategory } from '../audio/presets'
+import { TrackVisualizer } from './TrackVisualizer'
+import { EffectPanel } from './EffectPanel'
+import { EffectDropdown } from './EffectDropdown'
 
 // ============================================================================
 // TYPES
 // ============================================================================
+
+interface TrackEffect {
+  instanceId: string
+  effectId: EffectId
+  config: Record<string, unknown>
+  enabled: boolean
+}
 
 interface Track {
   id: number
@@ -17,9 +30,9 @@ interface Track {
   playing: boolean
   loop: boolean
   volume: number
-  lowpass: number   // Hz, 20000 = off
-  highpass: number  // Hz, 20 = off
+  effects: TrackEffect[]
   sound: PlayingSound | null
+  effectGraph: EffectGraph | null
 }
 
 interface SoundboardSlot {
@@ -43,6 +56,7 @@ const S: Record<string, React.CSSProperties> = {
   btn: { padding: '10px 20px', background: '#4ecdc4', color: '#1a1a2e', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 500 },
   btnSmall: { padding: '6px 12px', background: 'rgba(255,255,255,0.1)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 },
   btnActive: { padding: '6px 12px', background: '#4ecdc4', color: '#1a1a2e', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 },
+  btnDanger: { padding: '4px 8px', background: 'rgba(255,100,100,0.2)', color: '#ff6666', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 },
   layout: { display: 'grid', gridTemplateColumns: '280px 1fr', gap: 20 },
   panel: { background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 16 },
   panelTitle: { fontSize: 11, textTransform: 'uppercase' as const, color: 'rgba(255,255,255,0.4)', marginBottom: 12, letterSpacing: 1 },
@@ -51,14 +65,17 @@ const S: Record<string, React.CSSProperties> = {
   sampleList: { maxHeight: 200, overflow: 'auto' },
   sampleItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: 'rgba(255,255,255,0.05)', borderRadius: 4, marginBottom: 4, cursor: 'grab', fontSize: 13 },
   track: { background: 'rgba(0,0,0,0.2)', borderRadius: 6, padding: 12, marginBottom: 10 },
-  trackHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  trackHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   trackName: { fontSize: 12, color: 'rgba(255,255,255,0.6)' },
-  trackSample: { fontSize: 13, color: '#4ecdc4', flex: 1, marginLeft: 10 },
-  trackControls: { display: 'flex', gap: 8, alignItems: 'center' },
-  sliderRow: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 },
-  sliderLabel: { fontSize: 11, color: 'rgba(255,255,255,0.5)', width: 25 },
-  slider: { flex: 1, height: 4 },
-  sliderValue: { fontSize: 11, color: 'rgba(255,255,255,0.5)', width: 50, textAlign: 'right' as const },
+  trackSample: { fontSize: 13, color: '#4ecdc4', flex: 1, marginLeft: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
+  trackControls: { display: 'flex', gap: 6, alignItems: 'center' },
+  trackBody: { display: 'flex', gap: 16, alignItems: 'flex-start' },
+  trackSliders: { display: 'flex', flexDirection: 'column' as const, gap: 6, minWidth: 220, maxWidth: 280 },
+  trackVis: { flex: 1, height: 80, background: 'rgba(0,0,0,0.3)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.3)', fontSize: 12 },
+  sliderRow: { display: 'flex', alignItems: 'center', gap: 6 },
+  sliderLabel: { fontSize: 10, color: 'rgba(255,255,255,0.4)', width: 24, textTransform: 'uppercase' as const },
+  slider: { width: 100, height: 4, appearance: 'none' as const, background: 'rgba(255,255,255,0.1)', borderRadius: 2, outline: 'none' },
+  sliderValue: { fontSize: 10, color: 'rgba(255,255,255,0.5)', width: 44, textAlign: 'right' as const },
   soundboard: { marginTop: 20 },
   soundboardGrid: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 },
   soundboardSlot: { background: 'rgba(0,0,0,0.3)', borderRadius: 6, padding: 12, textAlign: 'center' as const, minHeight: 60, display: 'flex', flexDirection: 'column' as const, justifyContent: 'center', alignItems: 'center', cursor: 'pointer' },
@@ -68,6 +85,10 @@ const S: Record<string, React.CSSProperties> = {
   keybindSlot: { background: 'rgba(0,0,0,0.3)', borderRadius: 6, padding: 10, textAlign: 'center' as const, cursor: 'pointer' },
   keybindListening: { background: 'rgba(78,205,196,0.2)', border: '1px solid #4ecdc4' },
   masterVolume: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 },
+  nowPlaying: { background: 'rgba(78,205,196,0.1)', borderRadius: 8, padding: 12, marginBottom: 16, border: '1px solid rgba(78,205,196,0.2)' },
+  nowPlayingHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  nowPlayingList: { display: 'flex', flexWrap: 'wrap' as const, gap: 6 },
+  nowPlayingItem: { background: 'rgba(0,0,0,0.3)', padding: '4px 8px', borderRadius: 4, fontSize: 11, display: 'flex', alignItems: 'center', gap: 6 },
 }
 
 // ============================================================================
@@ -78,18 +99,21 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
   const [isInitialized, setIsInitialized] = useState(false)
   const [masterVolume, setMasterVolume] = useState(0.7)
   const [samples, setSamples] = useState<LoadedSample[]>([])
-  const [tracks, setTracks] = useState<Track[]>(() =>
-    Array.from({ length: 6 }, (_, i) => ({
-      id: i,
-      sampleId: null,
-      playing: false,
-      loop: true,
-      volume: 0.7,
-      lowpass: 20000,
-      highpass: 20,
-      sound: null,
-    }))
-  )
+  const [nextTrackId, setNextTrackId] = useState(1)
+  const [nextEffectId, setNextEffectId] = useState(0)
+  const [tracks, setTracks] = useState<Track[]>(() => [{
+    id: 0,
+    sampleId: null,
+    playing: false,
+    loop: true,
+    volume: 0.7,
+    effects: [],
+    sound: null,
+    effectGraph: null,
+  }])
+  const [playingSoundsCount, setPlayingSoundsCount] = useState(0)
+  const [trackPlaytimes, setTrackPlaytimes] = useState<Record<number, { startTime: number; offset: number }>>({})
+  const [, forceUpdate] = useState(0) // For re-rendering playhead position
   const [soundboard, setSoundboard] = useState<SoundboardSlot[]>(() =>
     Array.from({ length: 5 }, () => ({ sampleId: null }))
   )
@@ -173,7 +197,42 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
     handleFiles(e.dataTransfer.files)
   }
 
+  // Poll playing sounds count and update playhead
+  useEffect(() => {
+    if (!isInitialized) return
+    const interval = setInterval(() => {
+      setPlayingSoundsCount(soundEngine.getPlayingSounds().length)
+      forceUpdate(n => n + 1) // Force update for playhead animation
+    }, 50)
+    return () => clearInterval(interval)
+  }, [isInitialized])
+
   // Track functions
+  const addTrack = () => {
+    setTracks(prev => [...prev, {
+      id: nextTrackId,
+      sampleId: null,
+      playing: false,
+      loop: true,
+      volume: 0.7,
+      effects: [],
+      sound: null,
+      effectGraph: null,
+    }])
+    setNextTrackId(prev => prev + 1)
+  }
+
+  const removeTrack = (trackId: number) => {
+    const track = tracks.find(t => t.id === trackId)
+    if (track?.sound) {
+      track.sound.stop()
+    }
+    if (track?.effectGraph) {
+      track.effectGraph.destroy()
+    }
+    setTracks(prev => prev.filter(t => t.id !== trackId))
+  }
+
   const assignSampleToTrack = (trackId: number, sampleId: string) => {
     setTracks(prev => prev.map(t =>
       t.id === trackId ? { ...t, sampleId, playing: false, sound: null } : t
@@ -185,17 +244,103 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
       if (t.id !== trackId) return t
       const updated = { ...t, ...updates }
 
-      // Apply filter changes to playing sound
-      if (updated.sound) {
-        if ('volume' in updates) {
-          updated.sound.setGain(updates.volume!)
-        }
-        if ('lowpass' in updates && updated.sound.setFilterFrequency) {
-          // Note: This applies to first filter in chain
-          updated.sound.setFilterFrequency(updates.lowpass!)
-        }
+      // Apply volume changes to playing sound
+      if (updated.sound && 'volume' in updates) {
+        updated.sound.setGain(updates.volume!)
       }
       return updated
+    }))
+  }
+
+  // Effect management for tracks
+  const addEffectToTrack = (trackId: number, effectId: EffectId) => {
+    const def = effectsRegistry[effectId]
+    if (!def) return
+
+    const instanceId = `${effectId}_${nextEffectId}`
+    setNextEffectId(prev => prev + 1)
+
+    setTracks(prev => prev.map(t => {
+      if (t.id !== trackId) return t
+
+      const newEffect: TrackEffect = {
+        instanceId,
+        effectId,
+        config: { ...def.defaults },
+        enabled: true,
+      }
+
+      // Insert effect in order based on effect's order property
+      const effects = [...t.effects]
+      const insertIndex = effects.findIndex(e => {
+        const eDef = effectsRegistry[e.effectId]
+        return eDef && eDef.order > def.order
+      })
+
+      if (insertIndex === -1) {
+        effects.push(newEffect)
+      } else {
+        effects.splice(insertIndex, 0, newEffect)
+      }
+
+      // Update live effect graph if playing
+      if (t.effectGraph) {
+        t.effectGraph.add(effectId, newEffect.config)
+      }
+
+      return { ...t, effects }
+    }))
+  }
+
+  const updateTrackEffect = (trackId: number, instanceId: string, config: Partial<Record<string, unknown>>) => {
+    setTracks(prev => prev.map(t => {
+      if (t.id !== trackId) return t
+
+      const effects = t.effects.map(e => {
+        if (e.instanceId !== instanceId) return e
+        const newConfig = { ...e.config, ...config }
+
+        // Update live effect graph if playing
+        if (t.effectGraph) {
+          t.effectGraph.update(instanceId, config)
+        }
+
+        return { ...e, config: newConfig }
+      })
+
+      return { ...t, effects }
+    }))
+  }
+
+  const toggleTrackEffect = (trackId: number, instanceId: string, enabled: boolean) => {
+    setTracks(prev => prev.map(t => {
+      if (t.id !== trackId) return t
+
+      const effects = t.effects.map(e => {
+        if (e.instanceId !== instanceId) return e
+
+        // Update live effect graph if playing
+        if (t.effectGraph) {
+          t.effectGraph.setEnabled(instanceId, enabled)
+        }
+
+        return { ...e, enabled }
+      })
+
+      return { ...t, effects }
+    }))
+  }
+
+  const removeTrackEffect = (trackId: number, instanceId: string) => {
+    setTracks(prev => prev.map(t => {
+      if (t.id !== trackId) return t
+
+      // Remove from live effect graph if playing
+      if (t.effectGraph) {
+        t.effectGraph.remove(instanceId)
+      }
+
+      return { ...t, effects: t.effects.filter(e => e.instanceId !== instanceId) }
     }))
   }
 
@@ -203,24 +348,49 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
     const track = tracks.find(t => t.id === trackId)
     if (!track || !track.sampleId) return
 
+    const ctx = soundEngine.getContext()
+    const masterGain = soundEngine.getMasterGain()
+    if (!ctx || !masterGain) return
+
     // Stop existing
     if (track.sound) {
       track.sound.stop()
     }
+    if (track.effectGraph) {
+      track.effectGraph.destroy()
+    }
 
+    // Create effect graph
+    const effectGraph = new EffectGraph(ctx, effectsRegistry)
+
+    // Add effects from track config
+    for (const effect of track.effects) {
+      const instanceId = effectGraph.add(effect.effectId, effect.config)
+      if (!effect.enabled) {
+        effectGraph.setEnabled(instanceId, false)
+      }
+    }
+
+    // Play sample without built-in effects (we're using our own graph)
     const sound = soundEngine.playSample(track.sampleId, {
       gain: track.volume,
       loop: track.loop,
-      effects: {
-        lowpass: track.lowpass < 20000 ? { frequency: track.lowpass, Q: 1 } : undefined,
-        highpass: track.highpass > 20 ? { frequency: track.highpass, Q: 1 } : undefined,
-      },
     })
 
     if (sound) {
+      // Reconnect through our effect graph
+      // Disconnect from master, route through effect graph
+      sound.gainNode.disconnect()
+      sound.gainNode.connect(effectGraph.input)
+      effectGraph.output.connect(masterGain)
+
       setTracks(prev => prev.map(t =>
-        t.id === trackId ? { ...t, playing: true, sound } : t
+        t.id === trackId ? { ...t, playing: true, sound, effectGraph } : t
       ))
+      setTrackPlaytimes(prev => ({
+        ...prev,
+        [trackId]: { startTime: performance.now(), offset: 0 }
+      }))
     }
   }
 
@@ -229,9 +399,17 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
     if (track?.sound) {
       track.sound.stop()
     }
+    if (track?.effectGraph) {
+      track.effectGraph.destroy()
+    }
     setTracks(prev => prev.map(t =>
-      t.id === trackId ? { ...t, playing: false, sound: null } : t
+      t.id === trackId ? { ...t, playing: false, sound: null, effectGraph: null } : t
     ))
+    setTrackPlaytimes(prev => {
+      const next = { ...prev }
+      delete next[trackId]
+      return next
+    })
   }
 
   const toggleTrackFade = (trackId: number) => {
@@ -328,6 +506,27 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
     if (preset) preset.play()
   }
 
+  const stopAllSounds = () => {
+    soundEngine.stopAll()
+    setTracks(prev => prev.map(t => ({ ...t, playing: false, sound: null })))
+  }
+
+  const getPlayingSoundsList = () => {
+    return soundEngine.getPlayingSounds()
+  }
+
+  const getTrackCurrentTime = (track: Track): number => {
+    const playtime = trackPlaytimes[track.id]
+    if (!playtime || !track.playing) return 0
+    const sample = samples.find(s => s.id === track.sampleId)
+    if (!sample) return 0
+    const elapsed = (performance.now() - playtime.startTime) / 1000
+    if (track.loop) {
+      return elapsed % sample.duration
+    }
+    return Math.min(elapsed, sample.duration)
+  }
+
   if (!isInitialized) {
     return (
       <div style={S.page}>
@@ -373,7 +572,6 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
             >
-              <div style={{ fontSize: 24, marginBottom: 8 }}>📁</div>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)' }}>Drop audio files here</div>
               <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>or click to browse</div>
             </div>
@@ -508,8 +706,36 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
 
         {/* Right Panel: Tracks */}
         <div>
+          {/* Now Playing Status */}
+          {playingSoundsCount > 0 && (
+            <div style={S.nowPlaying}>
+              <div style={S.nowPlayingHeader}>
+                <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: 1 }}>
+                  Now Playing ({playingSoundsCount})
+                </span>
+                <button style={S.btnDanger} onClick={stopAllSounds}>Stop All</button>
+              </div>
+              <div style={S.nowPlayingList}>
+                {getPlayingSoundsList().map(sound => (
+                  <div key={sound.id} style={S.nowPlayingItem}>
+                    <span>{sound.type}</span>
+                    <button
+                      style={{ background: 'none', border: 'none', color: '#ff6666', cursor: 'pointer', fontSize: 10, padding: 0 }}
+                      onClick={() => sound.stop()}
+                    >
+                      x
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={S.panel}>
-            <div style={S.panelTitle}>Tracks</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={S.panelTitle}>Tracks ({tracks.length})</div>
+              <button style={S.btnSmall} onClick={addTrack}>+ Add Track</button>
+            </div>
             {tracks.map(track => (
               <div
                 key={track.id}
@@ -535,51 +761,68 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
                     <button
                       style={track.loop ? S.btnActive : S.btnSmall}
                       onClick={() => updateTrack(track.id, { loop: !track.loop })}
-                      title="Loop"
-                    >🔁</button>
+                    >Loop</button>
                     {track.playing ? (
-                      <button style={S.btnSmall} onClick={() => stopTrack(track.id)}>⏹</button>
+                      <button style={S.btnSmall} onClick={() => stopTrack(track.id)}>Stop</button>
                     ) : (
                       <button
                         style={S.btnSmall}
                         onClick={() => playTrack(track.id)}
                         disabled={!track.sampleId}
-                      >▶</button>
+                      >Play</button>
+                    )}
+                    {tracks.length > 1 && (
+                      <button style={S.btnDanger} onClick={() => removeTrack(track.id)}>Remove</button>
                     )}
                   </div>
                 </div>
 
-                <div style={S.sliderRow}>
-                  <span style={S.sliderLabel}>Vol</span>
-                  <input
-                    type="range" min={0} max={1} step={0.01}
-                    value={track.volume}
-                    onChange={e => updateTrack(track.id, { volume: +e.target.value })}
-                    style={S.slider}
-                  />
-                  <span style={S.sliderValue}>{Math.round(track.volume * 100)}%</span>
-                </div>
+                <div style={S.trackBody}>
+                  <div style={S.trackSliders}>
+                    {/* Volume slider always visible */}
+                    <div style={S.sliderRow}>
+                      <span style={S.sliderLabel}>Vol</span>
+                      <input
+                        type="range" min={0} max={1} step={0.01}
+                        value={track.volume}
+                        onChange={e => updateTrack(track.id, { volume: +e.target.value })}
+                        style={S.slider}
+                      />
+                      <span style={S.sliderValue}>{Math.round(track.volume * 100)}%</span>
+                    </div>
 
-                <div style={S.sliderRow}>
-                  <span style={S.sliderLabel}>LP</span>
-                  <input
-                    type="range" min={100} max={20000} step={100}
-                    value={track.lowpass}
-                    onChange={e => updateTrack(track.id, { lowpass: +e.target.value })}
-                    style={S.slider}
-                  />
-                  <span style={S.sliderValue}>{track.lowpass >= 20000 ? 'Off' : `${track.lowpass}Hz`}</span>
-                </div>
+                    {/* Effect panels */}
+                    {track.effects.map(effect => {
+                      const def = effectsRegistry[effect.effectId]
+                      if (!def) return null
+                      return (
+                        <EffectPanel
+                          key={effect.instanceId}
+                          def={def}
+                          config={effect.config}
+                          enabled={effect.enabled}
+                          onUpdate={(config) => updateTrackEffect(track.id, effect.instanceId, config)}
+                          onToggle={(enabled) => toggleTrackEffect(track.id, effect.instanceId, enabled)}
+                          onRemove={() => removeTrackEffect(track.id, effect.instanceId)}
+                        />
+                      )
+                    })}
 
-                <div style={S.sliderRow}>
-                  <span style={S.sliderLabel}>HP</span>
-                  <input
-                    type="range" min={20} max={5000} step={20}
-                    value={track.highpass}
-                    onChange={e => updateTrack(track.id, { highpass: +e.target.value })}
-                    style={S.slider}
-                  />
-                  <span style={S.sliderValue}>{track.highpass <= 20 ? 'Off' : `${track.highpass}Hz`}</span>
+                    {/* Add effect dropdown */}
+                    <EffectDropdown
+                      onAdd={(effectId) => addEffectToTrack(track.id, effectId)}
+                    />
+                  </div>
+
+                  <div style={{ flex: 1 }}>
+                    <TrackVisualizer
+                      audioBuffer={track.sampleId ? samples.find(s => s.id === track.sampleId)?.buffer ?? null : null}
+                      isPlaying={track.playing}
+                      currentTime={getTrackCurrentTime(track)}
+                      loop={track.loop}
+                      duration={samples.find(s => s.id === track.sampleId)?.duration ?? 0}
+                    />
+                  </div>
                 </div>
               </div>
             ))}
@@ -639,7 +882,7 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
                   </div>
                 )
               })}
-              {tracks.slice(0, 4).map(t => {
+              {tracks.map(t => {
                 const action: KeybindAction = { type: 'track-fade', trackId: t.id }
                 const key = getKeyForAction(action)
                 const isListening = listeningForKey?.type === 'track-fade' && listeningForKey.trackId === t.id
@@ -649,7 +892,7 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
                     style={{ ...S.keybindSlot, ...(isListening ? S.keybindListening : {}) }}
                     onClick={() => startListeningForKey(action)}
                   >
-                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Track {t.id + 1} Fade</div>
+                    <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>T{t.id + 1} Fade</div>
                     <div style={{ fontSize: 14, color: '#4ecdc4', marginTop: 4 }}>{key?.toUpperCase() || '—'}</div>
                   </div>
                 )
