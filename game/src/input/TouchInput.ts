@@ -1,4 +1,6 @@
 import { requestJump } from '../actions/playerActions'
+import { gameStore } from '../store'
+import { gameStateAtom } from '../store/atoms/gameAtoms'
 
 class TouchInput {
   private initialized = false
@@ -12,6 +14,16 @@ class TouchInput {
   }
 
   private handleTouchStart = (e: TouchEvent): void => {
+    // Only handle touches when game is playing
+    const gameState = gameStore.get(gameStateAtom)
+    if (gameState !== 'playing') return
+
+    // Don't intercept touches on UI elements
+    const target = e.target as HTMLElement
+    if (target.closest('button, a, input, select, .ui-overlay, .dev-panel, .screen')) {
+      return
+    }
+
     const touch = e.touches[0]
     if (!touch) return
 
