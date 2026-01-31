@@ -54,7 +54,14 @@ type Player struct {
 	conn     *websocket.Conn
 	lastPing time.Time
 	state    PlayerState
-	mu       sync.Mutex
+	stateMu  sync.Mutex
+	writeMu  sync.Mutex
+}
+
+func (p *Player) WriteMessage(messageType int, data []byte) error {
+	p.writeMu.Lock()
+	defer p.writeMu.Unlock()
+	return p.conn.WriteMessage(messageType, data)
 }
 
 var (
@@ -74,41 +81,41 @@ type WSMessage struct {
 func broadcastPlayerCount() {
 	playersMu.RLock()
 	count := len(players)
-	conns := make([]*websocket.Conn, 0, len(players))
-	for conn := range players {
-		conns = append(conns, conn)
+	playerList := make([]*Player, 0, len(players))
+	for _, player := range players {
+		playerList = append(playerList, player)
 	}
 	playersMu.RUnlock()
 
 	msg := WSMessage{Type: "playerCount", PlayerCount: count}
 	data, _ := json.Marshal(msg)
 
-	for _, conn := range conns {
-		conn.WriteMessage(websocket.TextMessage, data)
+	for _, player := range playerList {
+		player.WriteMessage(websocket.TextMessage, data)
 	}
 }
 
 func broadcastPlayerLeft(id uint64) {
 	playersMu.RLock()
-	conns := make([]*websocket.Conn, 0, len(players))
-	for conn := range players {
-		conns = append(conns, conn)
+	playerList := make([]*Player, 0, len(players))
+	for _, player := range players {
+		playerList = append(playerList, player)
 	}
 	playersMu.RUnlock()
 
 	msg := WSMessage{Type: "playerLeft", ID: id}
 	data, _ := json.Marshal(msg)
 
-	for _, conn := range conns {
-		conn.WriteMessage(websocket.TextMessage, data)
+	for _, player := range playerList {
+		player.WriteMessage(websocket.TextMessage, data)
 	}
 }
 
 func broadcastBuildTime() {
 	playersMu.RLock()
-	conns := make([]*websocket.Conn, 0, len(players))
-	for conn := range players {
-		conns = append(conns, conn)
+	playerList := make([]*Player, 0, len(players))
+	for _, player := range players {
+		playerList = append(playerList, player)
 	}
 	playersMu.RUnlock()
 
@@ -119,8 +126,8 @@ func broadcastBuildTime() {
 	msg := WSMessage{Type: "buildTime", BuildTime: buildTimeStr}
 	data, _ := json.Marshal(msg)
 
-	for _, conn := range conns {
-		conn.WriteMessage(websocket.TextMessage, data)
+	for _, player := range playerList {
+		player.WriteMessage(websocket.TextMessage, data)
 	}
 }
 
@@ -135,16 +142,16 @@ func broadcastPlayerStates() {
 		}
 
 		states := make(map[uint64]PlayerState)
-		conns := make(map[*websocket.Conn]uint64)
-		for conn, player := range players {
-			player.mu.Lock()
+		playerConns := make(map[*Player]uint64)
+		for _, player := range players {
+			player.stateMu.Lock()
 			states[player.ID] = player.state
-			player.mu.Unlock()
-			conns[conn] = player.ID
+			player.stateMu.Unlock()
+			playerConns[player] = player.ID
 		}
 		playersMu.RUnlock()
 
-		for conn, myID := range conns {
+		for player, myID := range playerConns {
 			otherStates := make(map[uint64]PlayerState)
 			for id, state := range states {
 				if id != myID {
@@ -154,7 +161,7 @@ func broadcastPlayerStates() {
 			if len(otherStates) > 0 {
 				msg := WSMessage{Type: "players", Players: otherStates}
 				data, _ := json.Marshal(msg)
-				conn.WriteMessage(websocket.TextMessage, data)
+				player.WriteMessage(websocket.TextMessage, data)
 			}
 		}
 	}
@@ -217,9 +224,9 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 				if msg.State != nil {
 					playersMu.RLock()
 					if p, ok := players[conn]; ok {
-						p.mu.Lock()
+						p.stateMu.Lock()
 						p.state = *msg.State
-						p.mu.Unlock()
+						p.stateMu.Unlock()
 					}
 					playersMu.RUnlock()
 				}
