@@ -13,7 +13,7 @@ cd server && go run .        # Multiplayer server (optional)
 
 ## File Tree
 
-See `doc/2026-01-31-1700-file_tree.md` for annotated codebase structure with imports/exports/types.
+See `doc/file_tree.md` for annotated codebase structure with imports/exports/types.
 
 ## Architecture
 
