@@ -15,7 +15,7 @@ import {
   damageAmountAtom,
   visualStyleAtom,
 } from '../store/atoms/configAtoms'
-import { setPlayerPosition, takeDamage } from '../actions/playerActions'
+import { setPlayerPosition, setPlayerVelocity, takeDamage } from '../actions/playerActions'
 import { endGame } from '../actions/gameActions'
 import { visualStyleConfigs } from '../types/visualStyles'
 
@@ -72,9 +72,11 @@ export function Player() {
       true
     )
 
-    // Sync position to atom
+    // Sync position and velocity to atoms
     const position = rigidBodyRef.current.translation()
-    setPlayerPosition([position.x, position.y, position.z])
+    const velocity = rigidBodyRef.current.linvel()
+    setPlayerPosition({ x: position.x, y: position.y, z: position.z })
+    setPlayerVelocity({ x: velocity.x, y: velocity.y, z: velocity.z })
 
     // Check for game over
     const health = gameStore.get(playerHealthAtom)
