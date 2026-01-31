@@ -1,0 +1,291 @@
+================================================================================
+SESSION LOG - Masked Garden Game Project
+Date: 2026-01-31 19:00
+Session Focus: Actor Identity System, Game Toggles, Tree/Ground Colors
+================================================================================
+
+PROJECT LOCATION: c:\GameJam\MaskedGarden\game\
+
+================================================================================
+CHANGES MADE THIS SESSION
+================================================================================
+
+1. FIXED INVISIBLE PLAYER BODY
+------------------------------
+Problem: Player body was invisible. charBody.glb was corrupted (132 bytes, no mesh data).
+
+Solution: Replaced with correct file from Assets (4.7 KB with proper mesh data).
+
+Files Modified:
+- game/public/models/player/charBody.glb (replaced with working version)
+
+Source: Assets/Player/Player Character/MiiChar/charBody.glb
+
+
+2. ACTOR-BASED IDENTITY SYSTEM (Cryptographic Keys)
+---------------------------------------------------
+Problem: Player body color changed on every page refresh.
+
+Solution: Implemented persistent identity using ECDSA P-256 keypair stored in localStorage.
+Body color is now derived from public key and stays the same across sessions.
+
+Files Created:
+- game/src/online/actorIdentity.ts (NEW)
+  - getOrCreateIdentity(): Generates/retrieves keypair from localStorage
+  - deriveColorHue(): Deterministic color from public key (hash * 31 mod 360)
+  - Uses Web Crypto API for ECDSA P-256 key generation
+
+Files Modified:
+- game/src/online/wsClient.ts
+  - Now async function
+  - Sends "hello" message with publicKey on connect
+  - Derives color locally before server confirmation
+
+- server/server.go
+  - Added pubKeyToID map for persistent actor IDs
+  - Added getOrCreateActorID() and deriveColorHue() functions
+  - Waits for "hello" message before sending welcome
+  - Color derived from public key (same algorithm as client)
+
+Protocol Flow:
+  1. Client generates/loads keypair from localStorage
+  2. Client connects, sends { type: "hello", publicKey: "base64..." }
+  3. Server maps publicKey → actorID, derives colorHue
+  4. Server sends { type: "welcome", id: 42, colorHue: 137.5 }
+
+
+3. HEALTH & SCORE SYSTEM TOGGLES
+--------------------------------
+Problem: Health and score systems were always active, but not needed for current gameplay.
+
+Solution: Added checkboxes in DevPanel to enable/disable (default: OFF).
+
+Files Modified:
+- game/src/store/atoms/configAtoms.ts
+  - Added healthEnabledAtom = atom(false)
+  - Added scoreEnabledAtom = atom(false)
+
+- game/src/ui/DevPanel.tsx
+  - Added Checkbox component
+  - Added "Game Systems" section with Health/Score toggles
+
+- game/src/components/Player.tsx
+  - handleCollision() skips damage if healthEnabled = false
+  - Game over check only runs if healthEnabled = true
+
+- game/src/game/GameLoop.ts
+  - Score increments only if scoreEnabled = true
+
+- game/src/ui/HealthBar.tsx
+  - Returns null if healthEnabled = false
+
+- game/src/ui/ScoreDisplay.tsx
+  - Returns null if scoreEnabled = false
+
+
+4. TREE TRUNK & LEAVES COLORING
+-------------------------------
+Problem: Trees were single-color meshes with no variation.
+
+Solution: Load separate trunk/leaves models with brown/green colors and variation.
+
+Files Created:
+- game/public/models/foliage/treeTrunk.glb (copied from Assets/Foliage/)
+- game/public/models/foliage/treeLeaves.glb (copied from Assets/Foliage/)
+
+Files Modified:
+- game/src/store/atoms/configAtoms.ts
+  - Added treeColorVariationAtom = atom(1) (0-10 range)
+
+- game/src/ui/DevPanel.tsx
+  - Added "Tree Variation" slider under Environment section
+
+- game/src/engine/ThreeEngine.ts
+  - Rewrote generateObstacles() to load treeTrunk.glb + treeLeaves.glb
+  - Trunk: Brown hue ~30 with variation
+  - Leaves: Green hue ~120 with variation
+  - Each tree gets unique color within variation range
+
+Color Algorithm:
+```typescript
+const trunkHue = 30 + (Math.random() - 0.5) * variation * 30
+const leavesHue = 120 + (Math.random() - 0.5) * variation * 40
+trunkMaterial.color = hslToColor(trunkHue, 40, 35)   // Muted brown
+leavesMaterial.color = hslToColor(leavesHue, 55, 45) // Happy green
+```
+
+
+5. GROUND COLOR SLIDER WITH HEX DISPLAY
+---------------------------------------
+Problem: Ground was fixed dark grey-green color.
+
+Solution: Added vibrance slider (0 = dull, 1 = neon) with live hex display.
+
+Files Modified:
+- game/src/store/atoms/configAtoms.ts
+  - Added groundVibranceAtom = atom(0)
+
+- game/src/ui/DevPanel.tsx
+  - Added "Ground Vibrance" slider (0-1)
+  - Added hex display showing current color value
+  - Added hslToHex() helper function
+
+- game/src/engine/ThreeEngine.ts
+  - Added subscription to groundVibranceAtom
+  - Updates groundMaterial.color in real-time
+
+Color Range:
+  - vibrance=0: hsl(100, 20%, 25%) → #3a5a3a (dull grey-green)
+  - vibrance=1: hsl(120, 100%, 50%) → #00ff00 (neon green)
+
+
+================================================================================
+CURRENT FILE STRUCTURE
+================================================================================
+
+game/
+├── public/
+│   └── models/
+│       ├── player/
+│       │   ├── charHead.glb      # Player head mesh
+│       │   └── charBody.glb      # Player body mesh (FIXED)
+│       └── foliage/
+│           ├── treeTrunk.glb     # Tree trunk mesh (NEW)
+│           ├── treeLeaves.glb    # Tree leaves mesh (NEW)
+│           └── treefab.glb       # Old combined tree (unused)
+│
+└── src/
+    ├── online/
+    │   ├── actorIdentity.ts      # NEW: Keypair generation, color derivation
+    │   └── wsClient.ts           # Updated: Sends hello with publicKey
+    ├── engine/
+    │   └── ThreeEngine.ts        # Updated: Tree colors, ground vibrance
+    ├── store/atoms/
+    │   └── configAtoms.ts        # Updated: New toggle/color atoms
+    ├── components/
+    │   └── Player.tsx            # Updated: Conditional health logic
+    ├── game/
+    │   └── GameLoop.ts           # Updated: Conditional score logic
+    └── ui/
+        ├── DevPanel.tsx          # Updated: Checkboxes, sliders, hex display
+        ├── HealthBar.tsx         # Updated: Conditional render
+        └── ScoreDisplay.tsx      # Updated: Conditional render
+
+server/
+└── server.go                     # Updated: Actor identity handling
+
+
+================================================================================
+KEY CODE SNIPPETS
+================================================================================
+
+ACTOR IDENTITY (actorIdentity.ts):
+```typescript
+export async function getOrCreateIdentity(): Promise<ActorIdentity> {
+  const stored = localStorage.getItem('actor_keypair')
+  if (stored) return JSON.parse(stored)
+
+  const keypair = await crypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    true, ['sign', 'verify']
+  )
+  // Export and store in localStorage...
+}
+
+export function deriveColorHue(publicKey: string): number {
+  const bytes = atob(publicKey)
+  let hash = 0
+  for (let i = 0; i < bytes.length; i++) {
+    hash = (hash * 31 + bytes.charCodeAt(i)) >>> 0
+  }
+  return hash % 360
+}
+```
+
+SERVER ACTOR HANDLING (server.go):
+```go
+func getOrCreateActorID(publicKey string) uint64 {
+    pubKeyMu.RLock()
+    if id, exists := pubKeyToID[publicKey]; exists {
+        pubKeyMu.RUnlock()
+        return id
+    }
+    // ... create new ID
+}
+
+func deriveColorHue(publicKey string) float64 {
+    decoded, _ := base64.StdEncoding.DecodeString(publicKey)
+    var hash uint32 = 0
+    for _, b := range decoded {
+        hash = hash*31 + uint32(b)
+    }
+    return float64(hash % 360)
+}
+```
+
+TREE COLOR VARIATION (ThreeEngine.ts):
+```typescript
+const variation = gameStore.get(treeColorVariationAtom)
+const trunkHue = 30 + (Math.random() - 0.5) * variation * 30
+const leavesHue = 120 + (Math.random() - 0.5) * variation * 40
+```
+
+
+================================================================================
+CONFIG ATOMS SUMMARY
+================================================================================
+
+// Game system toggles (default: OFF)
+healthEnabledAtom = atom(false)
+scoreEnabledAtom = atom(false)
+
+// Tree colors
+treeColorVariationAtom = atom(1)  // 0-10 range
+
+// Ground color
+groundVibranceAtom = atom(0)  // 0-1 range
+
+
+================================================================================
+HOW TO RUN
+================================================================================
+
+cd c:\GameJam\MaskedGarden\game
+pnpm dev
+
+Opens at: http://localhost:5173
+
+Dev Panel Features:
+- "Game Systems" section: Health/Score checkboxes
+- "Environment" section: Tree Variation, Ground Vibrance sliders
+- Ground Color hex display updates in real-time
+
+
+================================================================================
+KNOWN WORKING STATE
+================================================================================
+
+- Player body: Now visible (fixed corrupted glb file)
+- Actor identity: Body color persists across page refreshes
+- Actor identity: New color on incognito/cleared localStorage
+- Health system: Disabled by default, enable via checkbox
+- Score system: Disabled by default, enable via checkbox
+- Trees: Brown trunks + green leaves with configurable variation
+- Ground: Adjustable from dull grey-green to neon green
+- Hex display: Shows current ground color value
+
+
+================================================================================
+NEXT STEPS / IDEAS
+================================================================================
+
+- Player animations
+- Use actor identity for authentication (signing messages)
+- More foliage variety (grass, bushes)
+- Procedural level generation
+- Multiplayer: Show other players' unique colors in 3D (currently spheres)
+
+
+================================================================================
+END OF SESSION LOG
+================================================================================
