@@ -7,6 +7,7 @@ import { GameOverScreen } from './GameOverScreen'
 import { GyroPermission } from './GyroPermission'
 import { DevPanel } from './DevPanel'
 import { PlayerCount } from './PlayerCount'
+import { SoundDebugToggle } from './SoundDebugToggle'
 
 export function UIOverlay() {
   const gameState = useAtomValue(gameStateAtom)
@@ -30,6 +31,8 @@ export function UIOverlay() {
       {isDev && <DevPanel />}
 
       <PlayerCount />
+
+      <SoundDebugToggle />
     </div>
   )
 }
