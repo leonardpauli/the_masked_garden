@@ -1,11 +1,13 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameStore } from '../store'
-import { visualStyleAtom, playerSpeedAtom, cameraHeightAtom, cameraSmoothingAtom } from '../store/atoms/configAtoms'
+import { visualStyleAtom, playerSpeedAtom, cameraHeightAtom, cameraSmoothingAtom, gravityAtom, collisionCooldownAtom, damageAmountAtom } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, type VisualStyleConfig } from '../types/visualStyles'
 import { inputDirectionAtom } from '../store/atoms/inputAtoms'
 import { gameStateAtom } from '../store/atoms/gameAtoms'
-import { setPlayerPosition } from '../actions/playerActions'
+import { playerHealthAtom } from '../store/atoms/playerAtoms'
+import { setPlayerPosition, takeDamage } from '../actions/playerActions'
+import { endGame } from '../actions/gameActions'
 
 /**
  * Pure Three.js engine - no React dependencies
@@ -21,9 +23,17 @@ export class ThreeEngine {
   // Scene objects
   private ground: THREE.Mesh | null = null
   private obstacles: THREE.Mesh[] = []
+  private obstacleRadii: number[] = [] // Store collision radii for each obstacle
   private player: THREE.Group | null = null
   private ambientLight: THREE.AmbientLight | null = null
   private directionalLight: THREE.DirectionalLight | null = null
+  
+  // Physics state
+  private playerVelocity = new THREE.Vector3(0, 0, 0)
+  private playerRadius = 0.5 // Approximate player collision radius
+  private groundLevel = 0.5 // Y position when on ground
+  private lastCollisionTime = 0
+  private lastTime = 0
   
   // Materials (for easy style switching)
   private groundMaterial: THREE.MeshStandardMaterial
@@ -50,7 +60,8 @@ export class ThreeEngine {
       1000
     )
     this.camera.position.set(0, 20, 0)
-    this.camera.lookAt(0, 0, 0)
+    // Set fixed rotation to look straight down (rotate -90 degrees on X axis)
+    this.camera.rotation.set(-Math.PI / 2, 0, 0)
 
     // Initialize materials
     this.groundMaterial = new THREE.MeshStandardMaterial({ color: '#3a5a3a' })
@@ -178,6 +189,7 @@ export class ThreeEngine {
       mesh.receiveShadow = true
       
       this.obstacles.push(mesh)
+      this.obstacleRadii.push(scale) // Store the radius for collision detection
       this.obstacleMaterials.push(material)
       this.scene.add(mesh)
     }
@@ -192,6 +204,50 @@ export class ThreeEngine {
     this.unsubscribers.push(unsubVisualStyle)
   }
 
+  private checkObstacleCollisions(): void {
+    if (!this.player) return
+    
+    const now = Date.now()
+    const cooldown = gameStore.get(collisionCooldownAtom)
+    
+    // Skip if still in cooldown
+    if (now - this.lastCollisionTime < cooldown) return
+    
+    const playerPos = this.player.position
+    
+    for (let i = 0; i < this.obstacles.length; i++) {
+      const obstacle = this.obstacles[i]
+      const obstacleRadius = this.obstacleRadii[i]
+      
+      // Calculate distance between player and obstacle (only XZ plane for simplicity)
+      const dx = playerPos.x - obstacle.position.x
+      const dz = playerPos.z - obstacle.position.z
+      const distance = Math.sqrt(dx * dx + dz * dz)
+      
+      // Check if collision occurred
+      const collisionDistance = this.playerRadius + obstacleRadius
+      if (distance < collisionDistance) {
+        // Collision detected - apply damage
+        this.lastCollisionTime = now
+        const damage = gameStore.get(damageAmountAtom)
+        takeDamage(damage)
+        
+        // Push player away from obstacle
+        if (distance > 0.01) {
+          const pushStrength = (collisionDistance - distance) + 0.5
+          this.player.position.x += (dx / distance) * pushStrength
+          this.player.position.z += (dz / distance) * pushStrength
+          
+          // Also apply velocity in the push direction
+          this.playerVelocity.x = (dx / distance) * 3
+          this.playerVelocity.z = (dz / distance) * 3
+        }
+        
+        break // Only handle one collision per frame
+      }
+    }
+  }
+
   private handleResize = (): void => {
     const container = this.renderer.domElement.parentElement
     if (!container) return
@@ -204,17 +260,45 @@ export class ThreeEngine {
   private animate = (): void => {
     this.animationId = requestAnimationFrame(this.animate)
     
+    const now = performance.now()
+    const deltaTime = this.lastTime > 0 ? Math.min((now - this.lastTime) / 1000, 0.1) : 1 / 60
+    this.lastTime = now
+    
     const gameState = gameStore.get(gameStateAtom)
     
     // Update player movement when playing
     if (gameState === 'playing' && this.player) {
       const input = gameStore.get(inputDirectionAtom)
       const speed = gameStore.get(playerSpeedAtom)
-      const deltaTime = 1 / 60 // Approximate delta
+      const gravity = gameStore.get(gravityAtom)
       
-      // Move player based on input
+      // Simple direct movement - WASD/arrows map directly to world directions
       this.player.position.x += input.x * speed * deltaTime
       this.player.position.z += input.z * speed * deltaTime
+      
+      // Apply gravity
+      this.playerVelocity.y -= gravity * deltaTime
+      this.player.position.y += this.playerVelocity.y * deltaTime
+      
+      // Check if player is over the ground (ground is 100x100 centered at origin)
+      const groundHalfSize = 50
+      const isOverGround = 
+        Math.abs(this.player.position.x) < groundHalfSize && 
+        Math.abs(this.player.position.z) < groundHalfSize
+      
+      // Ground collision - only if over ground
+      if (isOverGround && this.player.position.y < this.groundLevel) {
+        this.player.position.y = this.groundLevel
+        this.playerVelocity.y = 0
+      }
+      
+      // Player fell too far - game over
+      if (this.player.position.y < -20) {
+        endGame()
+      }
+      
+      // Check obstacle collisions
+      this.checkObstacleCollisions()
       
       // Update player position in store
       setPlayerPosition([
@@ -222,6 +306,12 @@ export class ThreeEngine {
         this.player.position.y,
         this.player.position.z
       ])
+      
+      // Check for game over
+      const health = gameStore.get(playerHealthAtom)
+      if (health <= 0) {
+        endGame()
+      }
     }
     
     // Update camera to follow player
@@ -229,7 +319,7 @@ export class ThreeEngine {
       const cameraHeight = gameStore.get(cameraHeightAtom)
       const smoothing = gameStore.get(cameraSmoothingAtom)
       
-      // Smooth camera follow
+      // Smooth camera follow - only position, not rotation
       const targetX = this.player.position.x
       const targetZ = this.player.position.z
       
@@ -237,12 +327,8 @@ export class ThreeEngine {
       this.camera.position.z += (targetZ - this.camera.position.z) * smoothing
       this.camera.position.y = cameraHeight
       
-      // Look at player
-      this.camera.lookAt(
-        this.player.position.x,
-        0,
-        this.player.position.z
-      )
+      // Fixed camera angle - look straight down (no angle change)
+      // Camera rotation is set once in constructor, don't change it here
     }
     
     // Render
