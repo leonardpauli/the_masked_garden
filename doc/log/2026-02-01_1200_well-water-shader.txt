@@ -1,0 +1,231 @@
+================================================================================
+SESSION LOG - Masked Garden Game Project
+Date: 2026-02-01 12:00
+Session Focus: Well Object with Granite Material and Animated Water Shader
+================================================================================
+
+PROJECT LOCATION: c:\GameJam\MaskedGarden\game\
+
+
+================================================================================
+CHANGES MADE THIS SESSION
+================================================================================
+
+1. WELL OBJECT WITH GRANITE MATERIAL
+-------------------------------------
+Added a well structure at position (8, 8) with gray granite coloring.
+
+Files Copied:
+- Assets/Foliage/well.glb → game/public/models/foliage/well.glb
+- Assets/Foliage/wellWater.glb → game/public/models/foliage/wellWater.glb
+
+Files Modified:
+- game/src/engine/ThreeEngine.ts
+  - Added loadWell(x, z) method (line 300)
+  - Well uses MeshStandardMaterial with HSL(0, 5%, 45%) gray granite color
+  - Collision radius: 2.5 units
+  - Called in constructor: this.loadWell(8, 8)
+
+
+2. ANIMATED WATER SHADER
+------------------------
+Created custom shader for cartoony water effect with 2-3 colors.
+
+Files Created:
+- game/src/materials/WaterMaterial.ts (NEW)
+  - Custom ShaderMaterial with animated wave pattern
+  - Colors: Deep blue (#1a6b99), Light blue (#4db8e8), White foam (#ffffff)
+  - UV-based animation (no vertex displacement) to avoid clipping
+  - Slow, peaceful ripple speed
+  - update(deltaTime) method for animation
+  - setUvScale(scale) method for adjusting pattern density
+
+Shader Technique:
+```glsl
+// Multiple overlapping sine waves for organic look
+float wave1 = sin(scaledUv.x + time * 0.8) * sin(scaledUv.y * 0.75 + time * 0.6);
+float wave2 = sin(scaledUv.x * 0.625 - time * 0.5) * sin(scaledUv.y * 1.125 + time * 0.4);
+float wave = (wave1 + wave2) * 0.5;
+
+// Cartoony foam on wave peaks
+float foam = smoothstep(0.65, 0.75, wave);
+vec3 finalColor = mix(waterColor, foamColor, foam * 0.6);
+```
+
+
+3. WATER SHADER SCALE SLIDER
+----------------------------
+Added adjustable UV scale for water pattern density.
+
+Files Modified:
+- game/src/store/atoms/configAtoms.ts
+  - Added waterShaderScaleAtom = atom(4) (line 77)
+
+- game/src/ui/DevPanel.tsx
+  - Added "Water Scale" slider under Environment section
+  - Range: 0.5 - 20, step: 0.5
+
+- game/src/engine/ThreeEngine.ts
+  - Subscribes to waterShaderScaleAtom changes
+  - Updates shader in real-time via setUvScale()
+
+
+4. BUG FIXES
+------------
+Problem: Water texture z-fighting with ground plane.
+Solution: Moved water Y position from 0 to 1 (later adjusted by user to 1).
+
+Problem: Well had no collision.
+Solution: Well is added to obstacles array with radius 2.5 for sphere collision.
+
+
+================================================================================
+CURRENT FILE STRUCTURE
+================================================================================
+
+game/
+├── public/
+│   └── models/
+│       ├── player/
+│       │   ├── charHead.glb
+│       │   └── charBody.glb
+│       └── foliage/
+│           ├── treeTrunk.glb
+│           ├── treeLeaves.glb
+│           ├── treefab.glb
+│           ├── well.glb          # NEW
+│           └── wellWater.glb     # NEW
+│
+└── src/
+    ├── materials/
+    │   ├── CapeMaterial.ts
+    │   └── WaterMaterial.ts      # NEW
+    ├── engine/
+    │   └── ThreeEngine.ts        # Updated: loadWell(), water animation
+    ├── store/atoms/
+    │   └── configAtoms.ts        # Updated: waterShaderScaleAtom
+    └── ui/
+        └── DevPanel.tsx          # Updated: Water Scale slider
+
+
+================================================================================
+KEY CODE SNIPPETS
+================================================================================
+
+WATER MATERIAL (WaterMaterial.ts):
+```typescript
+export class WaterMaterial extends ShaderMaterial {
+  constructor(options: WaterMaterialOptions = {}) {
+    const { deepColor = 0x1a6b99, lightColor = 0x4db8e8, foamColor = 0xffffff, uvScale = 4 } = options
+    super({
+      uniforms: {
+        time: { value: 0 },
+        uvScale: { value: uvScale },
+        deepColor: { value: new Color(deepColor) },
+        lightColor: { value: new Color(lightColor) },
+        foamColor: { value: new Color(foamColor) },
+      },
+      vertexShader,
+      fragmentShader,
+    })
+  }
+
+  update(deltaTime: number): void {
+    this.uniforms.time.value += deltaTime
+  }
+
+  setUvScale(scale: number): void {
+    this.uniforms.uvScale.value = scale
+  }
+}
+```
+
+LOAD WELL (ThreeEngine.ts):
+```typescript
+private loadWell(x: number, z: number): void {
+  const loader = new GLTFLoader()
+  const wellRadius = 2.5
+
+  // Load well structure with granite material
+  loader.load('/models/foliage/well.glb', (gltf) => {
+    const well = gltf.scene
+    const graniteMaterial = new THREE.MeshStandardMaterial({
+      color: this.hslToColor(0, 5, 45)  // Gray granite
+    })
+    well.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.material = graniteMaterial
+        child.castShadow = true
+        child.receiveShadow = true
+      }
+    })
+    well.position.set(x, 0, z)
+    this.scene.add(well)
+    this.obstacles.push(well)
+    this.obstacleRadii.push(wellRadius)
+  })
+
+  // Load water surface with animated shader
+  loader.load('/models/foliage/wellWater.glb', (gltf) => {
+    const water = gltf.scene
+    const initialScale = gameStore.get(waterShaderScaleAtom)
+    this.waterMaterial = new WaterMaterial({ uvScale: initialScale })
+    water.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.material = this.waterMaterial
+      }
+    })
+    water.position.set(x, 1, z)
+    this.scene.add(water)
+  })
+}
+```
+
+
+================================================================================
+CONFIG ATOMS SUMMARY
+================================================================================
+
+// Water shader
+waterShaderScaleAtom = atom(4)  // UV scale for wave pattern (0.5-20 range)
+
+
+================================================================================
+HOW TO RUN
+================================================================================
+
+cd c:\GameJam\MaskedGarden\game
+pnpm dev
+
+Opens at: http://localhost:5173
+
+Dev Panel Features:
+- "Environment" section: Water Scale slider (adjusts wave pattern density)
+- Lower values = larger waves, higher values = more detailed ripples
+
+
+================================================================================
+KNOWN WORKING STATE
+================================================================================
+
+- Well: Gray granite structure at position (8, 8)
+- Water: Animated blue/white cartoony shader
+- Collision: Player cannot walk through well (radius 2.5)
+- Water Scale: Adjustable via DevPanel slider
+- Animation: Slow, peaceful ripples
+
+
+================================================================================
+NEXT STEPS / IDEAS
+================================================================================
+
+- Add more wells at different positions
+- Adjustable water colors via DevPanel
+- Well interaction (bucket mechanic?)
+- Splash particles when player approaches water
+- Sound effect for water ambient
+
+
+================================================================================
+END OF SESSION LOG
+================================================================================

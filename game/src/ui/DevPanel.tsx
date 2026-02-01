@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useAtom } from 'jotai'
 import { useMemo } from 'react'
 import {
@@ -7,6 +8,8 @@ import {
   cameraDistanceAtom,
   cameraSmoothingAtom,
   cameraViewAngleAtom,
+  cameraTransitionSpeedAtom,
+  cameraPresetsWithPersistAtom,
   gravityAtom,
   collisionCooldownAtom,
   damageAmountAtom,
@@ -16,8 +19,16 @@ import {
   scoreEnabledAtom,
   treeColorVariationAtom,
   groundVibranceAtom,
+  waterShaderScaleAtom,
+  type CameraPreset,
 } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, visualStyleOptions, type VisualStyle } from '../types/visualStyles'
+
+const DEFAULT_PRESETS: CameraPreset[] = [
+  { name: 'Default', distance: 14, viewAngle: 43 },
+  { name: 'Close-up', distance: 8, viewAngle: 55 },
+  { name: 'Overview', distance: 25, viewAngle: 20 },
+]
 
 interface SliderProps {
   label: string
@@ -89,6 +100,8 @@ export function DevPanel() {
   const [cameraDistance, setCameraDistance] = useAtom(cameraDistanceAtom)
   const [cameraSmoothing, setCameraSmoothing] = useAtom(cameraSmoothingAtom)
   const [cameraViewAngle, setCameraViewAngle] = useAtom(cameraViewAngleAtom)
+  const [cameraTransitionSpeed, setCameraTransitionSpeed] = useAtom(cameraTransitionSpeedAtom)
+  const [cameraPresets, setCameraPresets] = useAtom(cameraPresetsWithPersistAtom)
   const [gravity, setGravity] = useAtom(gravityAtom)
   const [collisionCooldown, setCollisionCooldown] = useAtom(collisionCooldownAtom)
   const [damageAmount, setDamageAmount] = useAtom(damageAmountAtom)
@@ -97,6 +110,8 @@ export function DevPanel() {
   const [scoreEnabled, setScoreEnabled] = useAtom(scoreEnabledAtom)
   const [treeColorVariation, setTreeColorVariation] = useAtom(treeColorVariationAtom)
   const [groundVibrance, setGroundVibrance] = useAtom(groundVibranceAtom)
+  const [waterShaderScale, setWaterShaderScale] = useAtom(waterShaderScaleAtom)
+  const [newPresetName, setNewPresetName] = useState('')
 
   // Compute ground color hex from vibrance
   const groundColorHex = useMemo(() => {
@@ -106,17 +121,49 @@ export function DevPanel() {
     return hslToHex(hue, saturation, lightness)
   }, [groundVibrance])
 
+  const applyPreset = (preset: CameraPreset) => {
+    setCameraDistance(preset.distance)
+    setCameraViewAngle(preset.viewAngle)
+  }
+
+  const saveCurrentAsPreset = () => {
+    const name = newPresetName.trim() || `Preset ${cameraPresets.length + 1}`
+    const newPreset: CameraPreset = {
+      name,
+      distance: cameraDistance,
+      viewAngle: cameraViewAngle,
+    }
+    setCameraPresets([...cameraPresets, newPreset])
+    setNewPresetName('')
+  }
+
+  const deletePreset = (index: number) => {
+    setCameraPresets(cameraPresets.filter((_, i) => i !== index))
+  }
+
+  const resetPresets = () => {
+    setCameraPresets(DEFAULT_PRESETS)
+  }
+
   return (
     <div className={`dev-panel ${isOpen ? 'open' : 'closed'}`}>
       <button
         className="dev-panel-toggle"
         onClick={() => setIsOpen(!isOpen)}
       >
-        {isOpen ? '>' : '<'} DEV
+        DEV
       </button>
 
       {isOpen && (
         <div className="dev-panel-content">
+          <button
+            className="dev-button"
+            onClick={() => { window.location.hash = '#sound' }}
+            style={{ width: '100%', marginBottom: 12, padding: '8px 12px', background: '#4ecdc4', color: '#1a1a2e', border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 500 }}
+          >
+            Sound Workstation
+          </button>
+
           <h3>Visual Style</h3>
           <div className="dev-dropdown">
             <select
@@ -159,6 +206,41 @@ export function DevPanel() {
           />
 
           <h3>Camera</h3>
+          <div className="dev-presets">
+            {cameraPresets.map((preset, index) => (
+              <div key={index} className="dev-preset-row">
+                <button
+                  className="dev-preset-btn"
+                  onClick={() => applyPreset(preset)}
+                  title={`Distance: ${preset.distance}, Angle: ${preset.viewAngle}°`}
+                >
+                  {preset.name}
+                </button>
+                <button
+                  className="dev-preset-delete"
+                  onClick={() => deletePreset(index)}
+                  title="Delete preset"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="dev-preset-save">
+            <input
+              type="text"
+              placeholder="Preset name..."
+              value={newPresetName}
+              onChange={(e) => setNewPresetName(e.target.value)}
+              className="dev-preset-input"
+            />
+            <button className="dev-preset-save-btn" onClick={saveCurrentAsPreset}>
+              Save
+            </button>
+          </div>
+          <button className="dev-reset-btn" onClick={resetPresets}>
+            Reset Presets
+          </button>
           <Slider
             label="Distance"
             value={cameraDistance}
@@ -181,6 +263,14 @@ export function DevPanel() {
             onChange={setCameraSmoothing}
             min={0.01}
             max={1}
+            step={0.01}
+          />
+          <Slider
+            label="Transition"
+            value={cameraTransitionSpeed}
+            onChange={setCameraTransitionSpeed}
+            min={0.01}
+            max={0.3}
             step={0.01}
           />
 
@@ -245,6 +335,14 @@ export function DevPanel() {
             <span>Ground Color: </span>
             <span className="hex-value" style={{ color: groundColorHex }}>{groundColorHex}</span>
           </div>
+          <Slider
+            label="Water Scale"
+            value={waterShaderScale}
+            onChange={setWaterShaderScale}
+            min={0.5}
+            max={20}
+            step={0.5}
+          />
         </div>
       )}
     </div>

@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameStore } from '../store'
-import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, gravityAtom, collisionCooldownAtom, damageAmountAtom, treeColorVariationAtom, groundVibranceAtom } from '../store/atoms/configAtoms'
+import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, cameraTransitionSpeedAtom, gravityAtom, collisionCooldownAtom, damageAmountAtom, treeColorVariationAtom, groundVibranceAtom, waterShaderScaleAtom } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, type VisualStyleConfig } from '../types/visualStyles'
 import { inputDirectionAtom } from '../store/atoms/inputAtoms'
 import { gameStateAtom } from '../store/atoms/gameAtoms'
@@ -9,6 +9,7 @@ import { playerHealthAtom, playerColorHueAtom } from '../store/atoms/playerAtoms
 import { setPlayerPosition, takeDamage } from '../actions/playerActions'
 import { endGame } from '../actions/gameActions'
 import { ParticleSystem } from '../particles/ParticleSystem'
+import { WaterMaterial } from '../materials/WaterMaterial'
 
 /**
  * Pure Three.js engine - no React dependencies
@@ -37,6 +38,10 @@ export class ThreeEngine {
   private groundLevel = 0.5 // Y position when on ground
   private lastCollisionTime = 0
   private lastTime = 0
+
+  // Camera smoothing state (current values that smooth toward targets)
+  private currentCameraDistance = 14
+  private currentCameraViewAngle = 43
   
   // Particle system
   private particleSystem: ParticleSystem
@@ -46,6 +51,7 @@ export class ThreeEngine {
   // Materials (for easy style switching)
   private groundMaterial: THREE.MeshStandardMaterial
   private playerMaterial: THREE.MeshToonMaterial
+  private waterMaterial: WaterMaterial | null = null
 
   constructor(container: HTMLElement) {
     // Initialize renderer
@@ -81,6 +87,7 @@ export class ThreeEngine {
     this.setupLighting()
     this.loadPlayer()
     this.generateObstacles(25, 25)
+    this.loadWell(8, 8)
     
     // Initialize particle system
     this.particleSystem = new ParticleSystem(this.scene, 500)
@@ -293,6 +300,50 @@ export class ThreeEngine {
     })
   }
 
+  private loadWell(x: number, z: number): void {
+    const loader = new GLTFLoader()
+    const wellRadius = 2.5
+
+    // Load well structure with granite material
+    loader.load('/models/foliage/well.glb', (gltf) => {
+      const well = gltf.scene
+      const graniteMaterial = new THREE.MeshStandardMaterial({
+        color: this.hslToColor(0, 5, 45)  // Gray granite
+      })
+
+      well.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.material = graniteMaterial
+          child.castShadow = true
+          child.receiveShadow = true
+        }
+      })
+
+      well.position.set(x, 0, z)
+      this.scene.add(well)
+
+      // Add to obstacles for collision
+      this.obstacles.push(well)
+      this.obstacleRadii.push(wellRadius)
+    })
+
+    // Load water surface with animated shader
+    loader.load('/models/foliage/wellWater.glb', (gltf) => {
+      const water = gltf.scene
+      const initialScale = gameStore.get(waterShaderScaleAtom)
+      this.waterMaterial = new WaterMaterial({ uvScale: initialScale })
+
+      water.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.material = this.waterMaterial
+        }
+      })
+
+      water.position.set(x, 1, z)
+      this.scene.add(water)
+    })
+  }
+
   private subscribeToStore(): void {
     // Subscribe to visual style changes
     const unsubVisualStyle = gameStore.sub(visualStyleAtom, () => {
@@ -310,6 +361,15 @@ export class ThreeEngine {
       this.groundMaterial.color = this.hslToColor(hue, saturation, lightness)
     })
     this.unsubscribers.push(unsubGroundVibrance)
+
+    // Subscribe to water shader scale changes
+    const unsubWaterScale = gameStore.sub(waterShaderScaleAtom, () => {
+      const scale = gameStore.get(waterShaderScaleAtom)
+      if (this.waterMaterial) {
+        this.waterMaterial.setUvScale(scale)
+      }
+    })
+    this.unsubscribers.push(unsubWaterScale)
   }
 
   private checkObstacleCollisions(): void {
@@ -438,35 +498,45 @@ export class ThreeEngine {
     
     // Update camera to follow player
     if (this.player) {
-      const distance = gameStore.get(cameraDistanceAtom)
+      const targetDistance = gameStore.get(cameraDistanceAtom)
       const smoothing = gameStore.get(cameraSmoothingAtom)
-      const viewAngle = gameStore.get(cameraViewAngleAtom)
+      const targetViewAngle = gameStore.get(cameraViewAngleAtom)
+      const transitionSpeed = gameStore.get(cameraTransitionSpeedAtom)
+
+      // Smooth camera parameters toward target values (prevents jitter when adjusting sliders)
+      this.currentCameraDistance += (targetDistance - this.currentCameraDistance) * transitionSpeed
+      this.currentCameraViewAngle += (targetViewAngle - this.currentCameraViewAngle) * transitionSpeed
 
       // Convert angle to radians
-      const angleRad = (viewAngle * Math.PI) / 180
+      const angleRad = (this.currentCameraViewAngle * Math.PI) / 180
 
       // Calculate camera position based on view angle
       // At 0 degrees: camera directly above (top-down)
       // At 70 degrees: camera behind player (third-person)
-      const height = distance * Math.cos(angleRad)
-      const zOffset = distance * Math.sin(angleRad)
+      const height = this.currentCameraDistance * Math.cos(angleRad)
+      const zOffset = this.currentCameraDistance * Math.sin(angleRad)
 
       // Target position: above and behind player
       const targetX = this.player.position.x
       const targetY = this.player.position.y + height
       const targetZ = this.player.position.z + zOffset
 
-      // Smooth camera movement
+      // Smooth camera movement (following player)
       this.camera.position.x += (targetX - this.camera.position.x) * smoothing
       this.camera.position.y += (targetY - this.camera.position.y) * smoothing
       this.camera.position.z += (targetZ - this.camera.position.z) * smoothing
 
-      // Fixed rotation based on view angle (no left/right turning)
+      // Fixed rotation based on current view angle (smoothed, no jitter)
       this.camera.rotation.set(-Math.PI / 2 + angleRad, 0, 0)
     }
     
     // Update particle system
     this.particleSystem.update(deltaTime)
+
+    // Update water animation
+    if (this.waterMaterial) {
+      this.waterMaterial.update(deltaTime)
+    }
     
     // Render
     this.renderer.render(this.scene, this.camera)
