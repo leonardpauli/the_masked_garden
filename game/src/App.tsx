@@ -51,7 +51,7 @@ export function App() {
     }
   }, [route])
 
-  // Initialize audio immediately on load, resume on interaction if browser blocks autoplay
+  // Initialize audio on first user interaction (required for iOS Safari)
   useEffect(() => {
     if (route !== 'game') return
 
@@ -61,12 +61,9 @@ export function App() {
       if (initialized) return
       initialized = true
       await soundEngine.initialize()
+      await soundEngine.resume()
       await musicManager.initialize()
       await footstepsAudio.initialize()
-    }
-
-    const resumeAudio = async () => {
-      await soundEngine.resume()
     }
 
     const removeListeners = () => {
@@ -77,18 +74,11 @@ export function App() {
     }
 
     const handleInteraction = () => {
-      if (!initialized) {
-        initAudio()
-      } else {
-        resumeAudio()
-      }
+      initAudio()
       removeListeners()
     }
 
-    // Try to start audio immediately on page load
-    initAudio()
-
-    // If browser blocks autoplay, resume on first interaction
+    // Only initialize audio on first user interaction (iOS requires this)
     window.addEventListener('mousedown', handleInteraction)
     window.addEventListener('touchstart', handleInteraction)
     window.addEventListener('keydown', handleInteraction)
