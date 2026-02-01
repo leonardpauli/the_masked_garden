@@ -220,7 +220,11 @@ export class PhysicsWorld {
     // Static dynamic cubes (other players' cubes)
     for (const [, cube] of this.dynamicCubes) {
       if (!cube.isStatic) continue
-      // TODO: Add height awareness for cubes if needed
+
+      // Height awareness: skip if player is above the cube
+      const cubeTopY = cube.y + cube.size / 2
+      if (playerY >= cubeTopY - 0.1) continue
+
       const result = this.checkCubePlayerCollision(
         cube.x, cube.z, cube.size,
         playerX, playerZ, playerRadius
