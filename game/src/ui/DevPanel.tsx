@@ -1,7 +1,5 @@
-import React, { useState } from 'react'
-import { useAtom } from 'jotai'
-// ...existing code...
-import { useMemo } from 'react'
+import { useState, useMemo } from 'react'
+import { useAtom, useAtomValue } from 'jotai'
 import {
   playerSpeedAtom,
   playerScaleAtom,
@@ -25,27 +23,10 @@ import {
   type CameraPreset,
 } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, visualStyleOptions, type VisualStyle } from '../types/visualStyles'
-import { maskStateAtom, maskStateMachineAtom } from '../store/atoms/maskAtoms'
+import { maskStateAtom } from '../store/atoms/maskAtoms'
 import { MASK_STATES } from '../masksys/types'
 import type { MaskState } from '../masksys/types'
-// MaskState 与视觉风格的映射
-const maskStateToVisualStyle: Record<MaskState, VisualStyle> = {
-  NoMask: 'default',
-  SpringMask: 'nature',
-  AutumnMask: 'retro',
-  StormMask: 'cyberpunk',
-  FinalMask: 'neon',
-}
-
-// 切换 MaskState 的工具函数
-function getPrevMaskState(current: MaskState): MaskState {
-  const idx = MASK_STATES.indexOf(current)
-  return MASK_STATES[(idx - 1 + MASK_STATES.length) % MASK_STATES.length]
-}
-function getNextMaskState(current: MaskState): MaskState {
-  const idx = MASK_STATES.indexOf(current)
-  return MASK_STATES[(idx + 1) % MASK_STATES.length]
-}
+import { changeMaskState } from '../masksys/maskActions'
 
 const DEFAULT_PRESETS: CameraPreset[] = [
   { name: 'Default', distance: 14, viewAngle: 43 },
@@ -116,9 +97,7 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 export function DevPanel() {
-  // MaskState 相关
-  const [maskState, setMaskState] = useAtom(maskStateAtom)
-  const [maskStateMachine] = useAtom(maskStateMachineAtom)
+  const maskState = useAtomValue(maskStateAtom)
   const [isOpen, setIsOpen] = useAtom(devPanelOpenAtom)
   const [playerSpeed, setPlayerSpeed] = useAtom(playerSpeedAtom)
   const [playerScale, setPlayerScale] = useAtom(playerScaleAtom)
@@ -139,53 +118,6 @@ export function DevPanel() {
   const [groundVibrance, setGroundVibrance] = useAtom(groundVibranceAtom)
   const [waterShaderScale, setWaterShaderScale] = useAtom(waterShaderScaleAtom)
   const [newPresetName, setNewPresetName] = useState('')
-
-  // 切换 MaskState 的统一方法
-  const switchMaskState = (nextState: MaskState) => {
-    setMaskState(nextState)
-    if (maskStateMachine) {
-      maskStateMachine.transition(nextState)
-    }
-    setVisualStyle(maskStateToVisualStyle[nextState])
-  }
-
-  // 键盘事件监听（Q/E）
-  React.useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'q' || e.key === 'Q') {
-        switchMaskState(getPrevMaskState(maskState))
-      }
-      if (e.key === 'e' || e.key === 'E') {
-        switchMaskState(getNextMaskState(maskState))
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [maskState, maskStateMachine])
-
-  // 触摸滑动事件监听（左/右滑）
-  React.useEffect(() => {
-    let touchStartX: number | null = null
-    const onTouchStart = (e: TouchEvent) => {
-      touchStartX = e.touches[0].clientX
-    }
-    const onTouchEnd = (e: TouchEvent) => {
-      if (touchStartX === null) return
-      const dx = e.changedTouches[0].clientX - touchStartX
-      if (dx > 50) {
-        switchMaskState(getPrevMaskState(maskState))
-      } else if (dx < -50) {
-        switchMaskState(getNextMaskState(maskState))
-      }
-      touchStartX = null
-    }
-    window.addEventListener('touchstart', onTouchStart)
-    window.addEventListener('touchend', onTouchEnd)
-    return () => {
-      window.removeEventListener('touchstart', onTouchStart)
-      window.removeEventListener('touchend', onTouchEnd)
-    }
-  }, [maskState, maskStateMachine])
 
   // Compute ground color hex from vibrance
   const groundColorHex = useMemo(() => {
@@ -234,15 +166,7 @@ export function DevPanel() {
           <div className="dev-dropdown">
             <select
               value={maskState}
-              onChange={e => {
-                const nextState = e.target.value as MaskState
-                setMaskState(nextState)
-                if (maskStateMachine) {
-                  maskStateMachine.transition(nextState)
-                }
-                // 切换视觉风格
-                setVisualStyle(maskStateToVisualStyle[nextState])
-              }}
+              onChange={e => changeMaskState(e.target.value as MaskState)}
               className="dev-select"
             >
               {MASK_STATES.map(state => (

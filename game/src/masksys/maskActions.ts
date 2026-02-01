@@ -9,6 +9,7 @@ import { maskStateAtom, maskStateMachineAtom } from '../store/atoms/maskAtoms'
 import { MaskStateMachine } from './MaskStateMachine'
 import { allMaskCallbacks } from './maskCallbacks'
 import type { MaskState, MaskTransition } from './types'
+import { MASK_STATES } from './types'
 
 // State machine singleton
 let machineInstance: MaskStateMachine | null = null
@@ -102,4 +103,24 @@ export function destroyMaskStateMachine(): void {
     machineInstance = null
     gameStore.set(maskStateMachineAtom, null)
   }
+}
+
+/**
+ * Cycle to next mask state
+ */
+export function nextMask(): void {
+  const current = getCurrentMaskState()
+  const idx = MASK_STATES.indexOf(current)
+  const next = MASK_STATES[(idx + 1) % MASK_STATES.length]
+  changeMaskState(next)
+}
+
+/**
+ * Cycle to previous mask state
+ */
+export function prevMask(): void {
+  const current = getCurrentMaskState()
+  const idx = MASK_STATES.indexOf(current)
+  const prev = MASK_STATES[(idx - 1 + MASK_STATES.length) % MASK_STATES.length]
+  changeMaskState(prev)
 }

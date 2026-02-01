@@ -1,5 +1,6 @@
 import { setInputDirection, setInputSource } from '../actions/inputActions'
 import { requestJump } from '../actions/playerActions'
+import { nextMask, prevMask } from '../masksys/maskActions'
 
 class KeyboardInput {
   private keys: Set<string> = new Set()
@@ -25,6 +26,14 @@ class KeyboardInput {
     if (e.key === ' ' || e.key === 'Space') {
       e.preventDefault()
       requestJump()
+    }
+
+    // Q/E for mask switching
+    if (e.key === 'q' || e.key === 'Q') {
+      prevMask()
+    }
+    if (e.key === 'e' || e.key === 'E') {
+      nextMask()
     }
   }
 

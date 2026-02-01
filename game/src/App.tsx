@@ -11,6 +11,7 @@ import { footstepsAudio } from './audio/footsteps'
 import { musicManager } from './audio/musicManager'
 import { isMobile } from './utils/device'
 import { connectWebSocket } from './online/wsClient'
+import { initMaskStateMachine, destroyMaskStateMachine } from './masksys/maskActions'
 import { SoundDebug } from './ui/SoundDebug'
 import './App.css'
 
@@ -37,6 +38,7 @@ export function App() {
 
     gameLoop.start()
     connectWebSocket()
+    initMaskStateMachine()
 
     if (!isMobile()) {
       keyboardInput.initialize()
@@ -45,6 +47,7 @@ export function App() {
     return () => {
       gameLoop.destroy()
       keyboardInput.destroy()
+      destroyMaskStateMachine()
     }
   }, [route])
 
