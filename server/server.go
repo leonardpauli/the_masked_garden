@@ -379,14 +379,23 @@ func webhookHandler(w http.ResponseWriter, r *http.Request) {
 
 	if event == "push" {
 		go func() {
-			log.Println("Pulling latest changes...")
-			cmd := exec.Command("git", "-C", repoDir, "pull", "--ff-only")
+			log.Println("Fetching latest changes...")
+			cmd := exec.Command("git", "-C", repoDir, "fetch", "origin")
 			output, err := cmd.CombinedOutput()
 			if err != nil {
-				log.Printf("Git pull failed: %v\n%s", err, output)
+				log.Printf("Git fetch failed: %v\n%s", err, output)
 				return
 			}
-			log.Printf("Git pull succeeded:\n%s", output)
+			log.Printf("Git fetch succeeded:\n%s", output)
+
+			log.Println("Resetting to origin/main...")
+			cmd = exec.Command("git", "-C", repoDir, "reset", "--hard", "origin/main")
+			output, err = cmd.CombinedOutput()
+			if err != nil {
+				log.Printf("Git reset failed: %v\n%s", err, output)
+				return
+			}
+			log.Printf("Git reset succeeded:\n%s", output)
 
 			log.Println("Rebuilding...")
 			cmd = exec.Command("bash", "-c", fmt.Sprintf("cd %s/game && export PNPM_HOME=/home/exedev/.local/share/pnpm && export PATH=$PNPM_HOME:$PATH && pnpm install && pnpm build", repoDir))
