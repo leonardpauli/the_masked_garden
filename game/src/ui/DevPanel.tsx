@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useAtom } from 'jotai'
 // ...existing code...
 import { useMemo } from 'react'
@@ -35,6 +35,16 @@ const maskStateToVisualStyle: Record<MaskState, VisualStyle> = {
   AutumnMask: 'retro',
   StormMask: 'cyberpunk',
   FinalMask: 'neon',
+}
+
+// 切换 MaskState 的工具函数
+function getPrevMaskState(current: MaskState): MaskState {
+  const idx = MASK_STATES.indexOf(current)
+  return MASK_STATES[(idx - 1 + MASK_STATES.length) % MASK_STATES.length]
+}
+function getNextMaskState(current: MaskState): MaskState {
+  const idx = MASK_STATES.indexOf(current)
+  return MASK_STATES[(idx + 1) % MASK_STATES.length]
 }
 
 const DEFAULT_PRESETS: CameraPreset[] = [
@@ -129,6 +139,53 @@ export function DevPanel() {
   const [groundVibrance, setGroundVibrance] = useAtom(groundVibranceAtom)
   const [waterShaderScale, setWaterShaderScale] = useAtom(waterShaderScaleAtom)
   const [newPresetName, setNewPresetName] = useState('')
+
+  // 切换 MaskState 的统一方法
+  const switchMaskState = (nextState: MaskState) => {
+    setMaskState(nextState)
+    if (maskStateMachine) {
+      maskStateMachine.transition(nextState)
+    }
+    setVisualStyle(maskStateToVisualStyle[nextState])
+  }
+
+  // 键盘事件监听（Q/E）
+  React.useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'q' || e.key === 'Q') {
+        switchMaskState(getPrevMaskState(maskState))
+      }
+      if (e.key === 'e' || e.key === 'E') {
+        switchMaskState(getNextMaskState(maskState))
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [maskState, maskStateMachine])
+
+  // 触摸滑动事件监听（左/右滑）
+  React.useEffect(() => {
+    let touchStartX: number | null = null
+    const onTouchStart = (e: TouchEvent) => {
+      touchStartX = e.touches[0].clientX
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      if (touchStartX === null) return
+      const dx = e.changedTouches[0].clientX - touchStartX
+      if (dx > 50) {
+        switchMaskState(getPrevMaskState(maskState))
+      } else if (dx < -50) {
+        switchMaskState(getNextMaskState(maskState))
+      }
+      touchStartX = null
+    }
+    window.addEventListener('touchstart', onTouchStart)
+    window.addEventListener('touchend', onTouchEnd)
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart)
+      window.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [maskState, maskStateMachine])
 
   // Compute ground color hex from vibrance
   const groundColorHex = useMemo(() => {
