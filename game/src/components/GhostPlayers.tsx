@@ -1,21 +1,22 @@
-import { useRef } from 'react'
+import { useRef, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Group, Mesh, MeshStandardMaterial, SphereGeometry, Vector3, Color } from 'three'
+import { Group, Object3D, Mesh, Vector3, Color } from 'three'
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { gameStore } from '../store'
 import { otherPlayersAtom } from '../store/atoms/onlineAtoms'
+import { playerScaleAtom } from '../store/atoms/configAtoms'
+import { GhostCapeMaterial } from '../materials/GhostCapeMaterial'
 
 // Spring-damper constants for smooth interpolation
-// Using critically damped spring (zeta = 1) to avoid oscillation
-const SPRING_STIFFNESS = 15 // How quickly it converges (higher = faster)
-const DAMPING_RATIO = 1.0 // 1.0 = critically damped, >1 = overdamped
+const SPRING_STIFFNESS = 15
+const DAMPING_RATIO = 1.0
 const DAMPING = 2 * Math.sqrt(SPRING_STIFFNESS) * DAMPING_RATIO
 
 interface GhostState {
-  mesh: Mesh
-  // Current state (what we render)
+  group: Group
+  material: GhostCapeMaterial
   position: Vector3
   velocity: Vector3
-  // Target state (from server)
   targetPosition: Vector3
   targetVelocity: Vector3
   colorHue: number
@@ -41,26 +42,22 @@ function springDamperUpdate(
   targetVelocity: Vector3,
   delta: number
 ) {
-  // Spring force: F = -k * (x - target) - c * (v - targetV)
-  // This creates smooth movement that considers both position AND velocity targets
   const dx = current.x - target.x
   const dy = current.y - target.y
   const dz = current.z - target.z
-  
+
   const dvx = velocity.x - targetVelocity.x
   const dvy = velocity.y - targetVelocity.y
   const dvz = velocity.z - targetVelocity.z
-  
-  // Acceleration from spring-damper
+
   const ax = -SPRING_STIFFNESS * dx - DAMPING * dvx
   const ay = -SPRING_STIFFNESS * dy - DAMPING * dvy
   const az = -SPRING_STIFFNESS * dz - DAMPING * dvz
-  
-  // Semi-implicit Euler integration
+
   velocity.x += ax * delta
   velocity.y += ay * delta
   velocity.z += az * delta
-  
+
   current.x += velocity.x * delta
   current.y += velocity.y * delta
   current.z += velocity.z * delta
@@ -69,22 +66,36 @@ function springDamperUpdate(
 export function GhostPlayers() {
   const ghostsRef = useRef<Map<number, GhostState>>(new Map())
   const groupRef = useRef<Group>(null)
+  const modelRef = useRef<Object3D | null>(null)
+  const modelLoadedRef = useRef(false)
+
+  // Load the player model once
+  useEffect(() => {
+    const loader = new GLTFLoader()
+    loader.load('/models/player.glb', (gltf) => {
+      modelRef.current = gltf.scene
+      modelLoadedRef.current = true
+    })
+  }, [])
 
   useFrame((_, delta) => {
-    if (!groupRef.current) return
-    
-    // Clamp delta to avoid physics explosion on tab switch
-    const dt = Math.min(delta, 0.1)
+    if (!groupRef.current || !modelLoadedRef.current) return
 
+    const dt = Math.min(delta, 0.1)
     const ghosts = ghostsRef.current
     const otherPlayers = gameStore.get(otherPlayersAtom)
+    const playerScale = gameStore.get(playerScaleAtom)
 
     // Remove ghosts for players that left
     for (const [id, ghost] of ghosts) {
       if (!otherPlayers.has(id)) {
-        groupRef.current.remove(ghost.mesh)
-        ghost.mesh.geometry.dispose()
-        ;(ghost.mesh.material as MeshStandardMaterial).dispose()
+        groupRef.current.remove(ghost.group)
+        ghost.material.dispose()
+        ghost.group.traverse((child) => {
+          if (child instanceof Mesh) {
+            child.geometry?.dispose()
+          }
+        })
         ghosts.delete(id)
       }
     }
@@ -93,26 +104,34 @@ export function GhostPlayers() {
     for (const [id, state] of otherPlayers) {
       let ghost = ghosts.get(id)
 
-      if (!ghost) {
-        // Create new ghost mesh with unique color from golden angle hue
-        const playerColor = hslToColor(state.colorHue, 70, 55)
-        const emissiveColor = hslToColor(state.colorHue, 50, 35)
+      if (!ghost && modelRef.current) {
+        // Create new ghost with cloned model
+        const playerColor = hslToColor(state.colorHue, 70, 60)
 
-        const geometry = new SphereGeometry(0.5, 16, 16)
-        const material = new MeshStandardMaterial({
+        const material = new GhostCapeMaterial({
           color: playerColor,
-          transparent: true,
-          opacity: 0.5,
-          emissive: emissiveColor,
-          emissiveIntensity: 0.4,
+          opacity: 0.6,
+          lagWeight: 0.08,
+          displacementStrength: 0.15,
         })
-        const mesh = new Mesh(geometry, material)
-        mesh.castShadow = false
-        mesh.receiveShadow = false
-        groupRef.current.add(mesh)
+
+        // Clone the model and apply ghost material
+        const group = new Group()
+        const modelClone = modelRef.current.clone()
+        modelClone.traverse((child) => {
+          if (child instanceof Mesh) {
+            child.material = material
+            child.castShadow = false
+            child.receiveShadow = false
+          }
+        })
+        modelClone.scale.setScalar(playerScale)
+        group.add(modelClone)
+        groupRef.current.add(group)
 
         ghost = {
-          mesh,
+          group,
+          material,
           position: new Vector3(state.x, state.y, state.z),
           velocity: new Vector3(state.vx, state.vy, state.vz),
           targetPosition: new Vector3(state.x, state.y, state.z),
@@ -120,10 +139,10 @@ export function GhostPlayers() {
           colorHue: state.colorHue,
         }
         ghosts.set(id, ghost)
-
-        // Set initial position
-        mesh.position.copy(ghost.position)
+        group.position.copy(ghost.position)
       }
+
+      if (!ghost) continue
 
       // Update targets from server state
       ghost.targetPosition.set(state.x, state.y, state.z)
@@ -137,9 +156,10 @@ export function GhostPlayers() {
         ghost.targetVelocity,
         dt
       )
-      
-      // Update mesh position
-      ghost.mesh.position.copy(ghost.position)
+
+      // Update group position and material
+      ghost.group.position.copy(ghost.position)
+      ghost.material.update(ghost.velocity, dt)
     }
   })
 
