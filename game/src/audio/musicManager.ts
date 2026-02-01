@@ -44,13 +44,13 @@ class MusicManager {
 
     // Load all tracks
     const [synths, pads, mask1, mask2, mask3, mask4, wind] = await Promise.all([
-      soundEngine.loadSampleFromUrl('/audio/Music/Synths.wav', 'synths'),
-      soundEngine.loadSampleFromUrl('/audio/Music/Pads.wav', 'pads'),
-      soundEngine.loadSampleFromUrl('/audio/Music/Mask 1 - Pleasure.wav', 'mask1'),
-      soundEngine.loadSampleFromUrl('/audio/Music/Mask 2 - Loneliness.wav', 'mask2'),
-      soundEngine.loadSampleFromUrl('/audio/Music/Mask 3 - The Raw Mask.wav', 'mask3'),
-      soundEngine.loadSampleFromUrl('/audio/Music/Mask 4 - The Final Mask.wav', 'mask4'),
-      soundEngine.loadSampleFromUrl('/audio/Wind_Loop_v2.wav', 'wind'),
+      soundEngine.loadSampleFromUrl('/audio/music/synths.m4a', 'synths'),
+      soundEngine.loadSampleFromUrl('/audio/music/pads.m4a', 'pads'),
+      soundEngine.loadSampleFromUrl('/audio/music/mask-1-pleasure.m4a', 'mask1'),
+      soundEngine.loadSampleFromUrl('/audio/music/mask-2-loneliness.m4a', 'mask2'),
+      soundEngine.loadSampleFromUrl('/audio/music/mask-3-raw.m4a', 'mask3'),
+      soundEngine.loadSampleFromUrl('/audio/music/mask-4-final.m4a', 'mask4'),
+      soundEngine.loadSampleFromUrl('/audio/ambient/wind-loop.m4a', 'wind'),
     ])
 
     if (!synths || !pads || !mask1 || !mask2 || !mask3 || !mask4 || !wind) {

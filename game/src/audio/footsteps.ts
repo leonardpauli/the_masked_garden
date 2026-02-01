@@ -4,10 +4,10 @@ import { playerPositionAtom, isGroundedAtom } from '../store/atoms/playerAtoms'
 import { inputDirectionAtom } from '../store/atoms/inputAtoms'
 
 const FOOTSTEP_FILES = [
-  '/audio/Dirt 1.wav',
-  '/audio/Dirt 2.wav',
-  '/audio/Dirt 3.wav',
-  '/audio/Dirt 4.wav',
+  '/audio/sfx/footsteps/dirt-1.m4a',
+  '/audio/sfx/footsteps/dirt-2.m4a',
+  '/audio/sfx/footsteps/dirt-3.m4a',
+  '/audio/sfx/footsteps/dirt-4.m4a',
 ]
 
 const STEP_INTERVAL = 0.35 // seconds between footsteps

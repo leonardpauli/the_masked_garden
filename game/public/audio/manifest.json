@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "masterLoopDuration": 45.0,
+  "tracks": [
+    {
+      "id": "synths",
+      "url": "music/synths.m4a",
+      "duration": 57.6,
+      "category": "music",
+      "tags": ["base", "always"],
+      "defaultGain": 0.45
+    },
+    {
+      "id": "pads",
+      "url": "music/pads.m4a",
+      "duration": 57.6,
+      "category": "music",
+      "tags": ["movement"],
+      "defaultGain": 1.152
+    },
+    {
+      "id": "mask-1-pleasure",
+      "url": "music/mask-1-pleasure.m4a",
+      "duration": 57.6,
+      "category": "music",
+      "tags": ["mask", "spring"],
+      "defaultGain": 0.5
+    },
+    {
+      "id": "mask-2-loneliness",
+      "url": "music/mask-2-loneliness.m4a",
+      "duration": 57.6,
+      "category": "music",
+      "tags": ["mask", "autumn"],
+      "defaultGain": 0.5
+    },
+    {
+      "id": "mask-3-raw",
+      "url": "music/mask-3-raw.m4a",
+      "duration": 57.6,
+      "category": "music",
+      "tags": ["mask", "storm"],
+      "defaultGain": 0.5
+    },
+    {
+      "id": "mask-4-final",
+      "url": "music/mask-4-final.m4a",
+      "duration": 57.6,
+      "category": "music",
+      "tags": ["mask", "final"],
+      "defaultGain": 0.5
+    },
+    {
+      "id": "wind-loop",
+      "url": "ambient/wind-loop.m4a",
+      "duration": 38.4,
+      "category": "ambient",
+      "tags": ["always"],
+      "defaultGain": 0.284
+    },
+    {
+      "id": "dirt-1",
+      "url": "sfx/footsteps/dirt-1.m4a",
+      "duration": 0.6,
+      "category": "sfx",
+      "tags": ["footsteps"]
+    },
+    {
+      "id": "dirt-2",
+      "url": "sfx/footsteps/dirt-2.m4a",
+      "duration": 0.6,
+      "category": "sfx",
+      "tags": ["footsteps"]
+    },
+    {
+      "id": "dirt-3",
+      "url": "sfx/footsteps/dirt-3.m4a",
+      "duration": 0.6,
+      "category": "sfx",
+      "tags": ["footsteps"]
+    },
+    {
+      "id": "dirt-4",
+      "url": "sfx/footsteps/dirt-4.m4a",
+      "duration": 0.6,
+      "category": "sfx",
+      "tags": ["footsteps"]
+    }
+  ]
+}

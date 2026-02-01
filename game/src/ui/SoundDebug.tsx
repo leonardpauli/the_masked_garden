@@ -7,6 +7,8 @@ import {
   EffectGraph,
   effectsRegistry,
   type EffectId,
+  trackManager,
+  type TrackState,
 } from '../audio'
 import { presets, presetsByCategory } from '../audio/presets'
 import { TrackVisualizer } from './TrackVisualizer'
@@ -85,6 +87,30 @@ const S: Record<string, React.CSSProperties> = {
   keybindSlot: { background: 'rgba(0,0,0,0.3)', borderRadius: 6, padding: 10, textAlign: 'center' as const, cursor: 'pointer' },
   keybindListening: { background: 'rgba(78,205,196,0.2)', border: '1px solid #4ecdc4' },
   masterVolume: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 },
+  // Asset library styles
+  assetSection: { marginTop: 20 },
+  assetHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  assetStats: { display: 'flex', gap: 16, fontSize: 11, color: 'rgba(255,255,255,0.5)' },
+  assetStat: { display: 'flex', alignItems: 'center', gap: 4 },
+  assetCategory: { marginBottom: 16 },
+  assetCategoryTitle: { fontSize: 11, textTransform: 'uppercase' as const, color: 'rgba(255,255,255,0.4)', marginBottom: 8, letterSpacing: 1, cursor: 'pointer', display: 'flex', justifyContent: 'space-between' },
+  assetList: { display: 'flex', flexDirection: 'column' as const, gap: 4 },
+  assetItem: { background: 'rgba(0,0,0,0.2)', borderRadius: 6, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 12 },
+  assetName: { flex: 1, fontSize: 13, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
+  assetMeta: { fontSize: 10, color: 'rgba(255,255,255,0.4)', display: 'flex', gap: 8 },
+  assetStatus: { fontSize: 10, padding: '2px 6px', borderRadius: 3 },
+  assetStatusUnloaded: { background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)' },
+  assetStatusLoading: { background: 'rgba(255,200,50,0.2)', color: '#ffc832' },
+  assetStatusReady: { background: 'rgba(78,205,196,0.2)', color: '#4ecdc4' },
+  assetStatusPlaying: { background: 'rgba(100,255,100,0.2)', color: '#64ff64' },
+  assetStatusError: { background: 'rgba(255,100,100,0.2)', color: '#ff6464' },
+  progressBar: { width: 60, height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden' },
+  progressFill: { height: '100%', background: '#4ecdc4', transition: 'width 0.1s' },
+  assetControls: { display: 'flex', gap: 4 },
+  gainSlider: { width: 60, height: 4, appearance: 'none' as const, background: 'rgba(255,255,255,0.1)', borderRadius: 2, cursor: 'pointer' },
+  masterClock: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(0,0,0,0.3)', borderRadius: 6, marginBottom: 12 },
+  clockBar: { flex: 1, height: 6, background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden', position: 'relative' as const },
+  clockFill: { height: '100%', background: 'linear-gradient(90deg, #4ecdc4, #44a08d)', transition: 'width 0.05s linear' },
   nowPlaying: { background: 'rgba(78,205,196,0.1)', borderRadius: 8, padding: 12, marginBottom: 16, border: '1px solid rgba(78,205,196,0.2)' },
   nowPlayingHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   nowPlayingList: { display: 'flex', flexWrap: 'wrap' as const, gap: 6 },
@@ -124,6 +150,12 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
   const [dragOverSoundboard, setDragOverSoundboard] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Track manager state
+  const [trackManagerInitialized, setTrackManagerInitialized] = useState(false)
+  const [assetLibraryExpanded, setAssetLibraryExpanded] = useState(true)
+  const [expandedAssetCategories, setExpandedAssetCategories] = useState<Set<string>>(new Set(['music', 'ambient']))
+  const [, forceAssetUpdate] = useState(0)
+
   // Synth palette state
   const [synthExpanded, setSynthExpanded] = useState(false)
   const [oscType, setOscType] = useState<OscillatorType>('sine')
@@ -138,10 +170,27 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
       await Promise.race([soundEngine.resume(), new Promise(r => setTimeout(r, 500))])
       soundEngine.setMasterVolume(masterVolume)
       setIsInitialized(true)
+
+      // Initialize track manager
+      try {
+        await trackManager.initialize('/audio/manifest.json')
+        setTrackManagerInitialized(true)
+      } catch (e) {
+        console.warn('Track manager init failed (manifest may not exist yet):', e)
+      }
     } catch (e) {
       console.error('Audio init error', e)
     }
   }, [masterVolume])
+
+  // Subscribe to track manager updates
+  useEffect(() => {
+    if (!trackManagerInitialized) return
+    const unsubscribe = trackManager.subscribe(() => {
+      forceAssetUpdate(n => n + 1)
+    })
+    return unsubscribe
+  }, [trackManagerInitialized])
 
   // Master volume
   useEffect(() => {
@@ -509,6 +558,63 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
   const stopAllSounds = () => {
     soundEngine.stopAll()
     setTracks(prev => prev.map(t => ({ ...t, playing: false, sound: null })))
+  }
+
+  // Asset library helpers
+  const toggleAssetCategory = (category: string) => {
+    setExpandedAssetCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(category)) next.delete(category)
+      else next.add(category)
+      return next
+    })
+  }
+
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B'
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  }
+
+  const getStatusStyle = (status: TrackState['status']): React.CSSProperties => {
+    switch (status) {
+      case 'unloaded': return { ...S.assetStatus, ...S.assetStatusUnloaded }
+      case 'loading': return { ...S.assetStatus, ...S.assetStatusLoading }
+      case 'ready': return { ...S.assetStatus, ...S.assetStatusReady }
+      case 'playing': return { ...S.assetStatus, ...S.assetStatusPlaying }
+      case 'error': return { ...S.assetStatus, ...S.assetStatusError }
+    }
+  }
+
+  const handlePreload = (trackId: string) => {
+    trackManager.hint(trackId, { priority: 'high' })
+  }
+
+  const handlePreloadAll = (category?: string) => {
+    const tracks = category
+      ? trackManager.getTracksByCategory(category as 'music' | 'ambient' | 'sfx')
+      : Array.from(trackManager.getAllTrackStates().values())
+
+    for (const track of tracks) {
+      if (track.status === 'unloaded') {
+        trackManager.hint(track.metadata.id, { priority: 'low' })
+      }
+    }
+  }
+
+  const handleSetTrackGain = (trackId: string, gain: number) => {
+    trackManager.setTarget(trackId, { gain, priority: 'high' })
+  }
+
+  const getTracksByCategory = (): Record<string, TrackState[]> => {
+    const result: Record<string, TrackState[]> = { music: [], ambient: [], sfx: [] }
+    for (const state of trackManager.getAllTrackStates().values()) {
+      const cat = state.metadata.category
+      if (!result[cat]) result[cat] = []
+      result[cat].push(state)
+    }
+    return result
   }
 
   const getPlayingSoundsList = () => {
@@ -899,6 +1005,162 @@ export function SoundDebug({ onBack }: { onBack?: () => void }) {
               })}
             </div>
           </div>
+
+          {/* Asset Library (Track Manager) */}
+          {trackManagerInitialized && (
+            <div style={{ ...S.panel, marginTop: 16 }}>
+              <div style={S.assetHeader}>
+                <div
+                  style={{ ...S.panelTitle, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                  onClick={() => setAssetLibraryExpanded(!assetLibraryExpanded)}
+                >
+                  <span>Asset Library</span>
+                  <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
+                    {trackManager.getAllTrackStates().size} tracks
+                  </span>
+                  <span>{assetLibraryExpanded ? '−' : '+'}</span>
+                </div>
+                <div style={S.assetStats}>
+                  <div style={S.assetStat}>
+                    <span style={{ color: '#4ecdc4' }}>Loaded:</span>
+                    <span>{formatBytes(trackManager.getTotalLoadedBytes())}</span>
+                  </div>
+                  <div style={S.assetStat}>
+                    <span style={{ color: 'rgba(255,255,255,0.4)' }}>Loading:</span>
+                    <span>{trackManager.getLoadingTracks().length}</span>
+                  </div>
+                  <div style={S.assetStat}>
+                    <span style={{ color: 'rgba(255,255,255,0.4)' }}>Queued:</span>
+                    <span>{trackManager.getQueuedTracks().length}</span>
+                  </div>
+                </div>
+              </div>
+
+              {assetLibraryExpanded && (
+                <>
+                  {/* Master Clock */}
+                  <div style={S.masterClock}>
+                    <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', width: 50 }}>Clock</span>
+                    <div style={S.clockBar}>
+                      <div
+                        style={{
+                          ...S.clockFill,
+                          width: `${(trackManager.getMasterClockPosition() / (trackManager.getManifest()?.masterLoopDuration ?? 1)) * 100}%`
+                        }}
+                      />
+                    </div>
+                    <span style={{ fontSize: 10, color: '#4ecdc4', width: 50, textAlign: 'right' }}>
+                      {trackManager.getMasterClockPosition().toFixed(1)}s
+                    </span>
+                  </div>
+
+                  {/* Preload All Button */}
+                  <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+                    <button style={S.btnSmall} onClick={() => handlePreloadAll()}>
+                      Preload All
+                    </button>
+                    <button style={S.btnSmall} onClick={() => handlePreloadAll('music')}>
+                      Preload Music
+                    </button>
+                  </div>
+
+                  {/* Categories */}
+                  {Object.entries(getTracksByCategory()).map(([category, categoryTracks]) => {
+                    if (categoryTracks.length === 0) return null
+                    const isExpanded = expandedAssetCategories.has(category)
+                    const loadedCount = categoryTracks.filter(t => t.status === 'ready' || t.status === 'playing').length
+                    const totalBytes = categoryTracks.reduce((sum, t) => sum + t.bytesLoaded, 0)
+
+                    return (
+                      <div key={category} style={S.assetCategory}>
+                        <div
+                          style={S.assetCategoryTitle}
+                          onClick={() => toggleAssetCategory(category)}
+                        >
+                          <span>
+                            {category.toUpperCase()} ({loadedCount}/{categoryTracks.length})
+                            <span style={{ marginLeft: 8, color: 'rgba(255,255,255,0.3)', fontSize: 10 }}>
+                              {formatBytes(totalBytes)}
+                            </span>
+                          </span>
+                          <span>{isExpanded ? '−' : '+'}</span>
+                        </div>
+
+                        {isExpanded && (
+                          <div style={S.assetList}>
+                            {categoryTracks.map(trackState => (
+                              <div key={trackState.metadata.id} style={S.assetItem}>
+                                {/* Status indicator */}
+                                <span style={getStatusStyle(trackState.status)}>
+                                  {trackState.status}
+                                </span>
+
+                                {/* Name */}
+                                <span style={S.assetName} title={trackState.metadata.id}>
+                                  {trackState.metadata.id}
+                                </span>
+
+                                {/* Duration */}
+                                <span style={S.assetMeta}>
+                                  {trackState.metadata.duration.toFixed(1)}s
+                                </span>
+
+                                {/* Progress bar for loading */}
+                                {trackState.status === 'loading' && (
+                                  <div style={S.progressBar}>
+                                    <div
+                                      style={{ ...S.progressFill, width: `${trackState.loadProgress * 100}%` }}
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Size info */}
+                                {trackState.bytesLoaded > 0 && (
+                                  <span style={{ ...S.assetMeta, width: 60, textAlign: 'right' }}>
+                                    {formatBytes(trackState.bytesLoaded)}
+                                  </span>
+                                )}
+
+                                {/* Controls */}
+                                <div style={S.assetControls}>
+                                  {trackState.status === 'unloaded' && (
+                                    <button
+                                      style={S.btnSmall}
+                                      onClick={() => handlePreload(trackState.metadata.id)}
+                                    >
+                                      Load
+                                    </button>
+                                  )}
+
+                                  {(trackState.status === 'ready' || trackState.status === 'playing') && (
+                                    <>
+                                      <input
+                                        type="range"
+                                        min={0}
+                                        max={1}
+                                        step={0.01}
+                                        value={trackState.targetGain}
+                                        onChange={e => handleSetTrackGain(trackState.metadata.id, parseFloat(e.target.value))}
+                                        style={S.gainSlider}
+                                        title={`Gain: ${Math.round(trackState.targetGain * 100)}%`}
+                                      />
+                                      <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)', width: 24 }}>
+                                        {Math.round(trackState.currentGain * 100)}%
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
