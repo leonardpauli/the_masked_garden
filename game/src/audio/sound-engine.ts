@@ -702,11 +702,6 @@ class SoundEngine {
   ): PlayingSound | null {
     if (!this.context || !this.masterGain) return null
 
-    // Auto-resume suspended context (iOS requires user interaction)
-    if (this.context.state === 'suspended') {
-      this.context.resume()
-    }
-
     const sample = this.loadedSamples.get(sampleId)
     if (!sample) return null
 
