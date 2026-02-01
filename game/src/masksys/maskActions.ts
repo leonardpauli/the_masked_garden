@@ -7,7 +7,7 @@
 import { gameStore } from '../store'
 import { maskStateAtom, maskStateMachineAtom } from '../store/atoms/maskAtoms'
 import { MaskStateMachine } from './MaskStateMachine'
-import { allMaskCallbacks } from './maskCallbacks'
+import { allMaskCallbacks, applyInitialMaskConfig } from './maskCallbacks'
 import type { MaskState, MaskTransition } from './types'
 import { MASK_STATES } from './types'
 
@@ -38,6 +38,9 @@ export function initMaskStateMachine(initialState: MaskState = 'NoMask'): MaskSt
   // Save instance to atom
   gameStore.set(maskStateMachineAtom, machineInstance)
   gameStore.set(maskStateAtom, initialState)
+
+  // Apply initial mask config (onEnter doesn't fire on init)
+  applyInitialMaskConfig(initialState)
 
   return machineInstance
 }

@@ -1,123 +1,134 @@
 /**
- * MaskState callback implementations (placeholder)
- * 
- * Define specific effects for each mask state, including:
- * - Shader switching
- * - Environment effects (tree growth/wither, falling leaves, storm, etc.)
- * - Sound effects
- * - Particle effects
+ * MaskState callback implementations using registry pattern
+ *
+ * Reads mask configurations from the registry and applies them on state transitions.
+ * Handles both mask-specific configs and game state (menu vs playing) camera modes.
  */
 
 import type { MaskState, MaskStateCallbacks } from './types'
-import { visualStyleAtom } from '../store/atoms/configAtoms'
+import { maskRegistry, type MaskConfig } from './masks'
+import {
+  visualStyleAtom,
+  effectParamsAtom,
+  cameraDistanceAtom,
+  cameraViewAngleAtom,
+  gravityAtom,
+  playerSpeedAtom,
+} from '../store/atoms/configAtoms'
+import { gameStateAtom } from '../store/atoms/gameAtoms'
+import { maskStateAtom } from '../store/atoms/maskAtoms'
 import { gameStore } from '../store'
 
-// ============== NoMask Callbacks ==============
-export const noMaskCallbacks: MaskStateCallbacks = {
-  onEnter: (from: MaskState) => {
-    console.log(`[NoMask] Entering no mask state, from: ${from}`)
-    // 切换到 default 风格
-    gameStore.set(visualStyleAtom, 'default')
-    // TODO: Restore default shader
-    // TODO: Restore default environment
-  },
-  onExit: (to: MaskState) => {
-    console.log(`[NoMask] Leaving no mask state, to: ${to}`)
-  },
-  onUpdate: (_deltaTime: number) => {
-    // No mask state continuous update logic
+/**
+ * Camera config for "playing" mode (overrides mask camera when game is active)
+ */
+const PLAYING_CAMERA = {
+  viewAngle: 70,
+  distance: 10,
+}
+
+/**
+ * Apply a mask configuration to the game state
+ * @param config The mask config to apply
+ * @param applyCamera Whether to apply camera values (false when game is playing)
+ */
+function applyMaskConfig(config: MaskConfig, applyCamera: boolean): void {
+  // Visual style
+  if (config.visualStyle !== undefined) {
+    gameStore.set(visualStyleAtom, config.visualStyle)
+  }
+
+  // Effect parameters
+  if (config.effectParams !== undefined) {
+    gameStore.set(effectParamsAtom, config.effectParams)
+  }
+
+  // Camera (only apply if not in playing state, or if explicitly requested)
+  if (applyCamera) {
+    if (config.cameraDistance !== undefined) {
+      gameStore.set(cameraDistanceAtom, config.cameraDistance)
+    }
+    if (config.cameraViewAngle !== undefined) {
+      gameStore.set(cameraViewAngleAtom, config.cameraViewAngle)
+    }
+  }
+
+  // Physics (always apply)
+  if (config.gravity !== undefined) {
+    gameStore.set(gravityAtom, config.gravity)
+  }
+  if (config.playerSpeed !== undefined) {
+    gameStore.set(playerSpeedAtom, config.playerSpeed)
   }
 }
 
-// ============== SpringMask Callbacks ==============
-export const springMaskCallbacks: MaskStateCallbacks = {
-  onEnter: (from: MaskState) => {
-    console.log(`[SpringMask] Entering spring mask state, from: ${from}`)
-    // 切换到 nature 风格
-    gameStore.set(visualStyleAtom, 'nature')
-    // TODO: Switch to spring shader
-    // TODO: Tree growth animation
-    // TODO: Add petal particle effects
-  },
-  onExit: (to: MaskState) => {
-    console.log(`[SpringMask] Leaving spring mask state, to: ${to}`)
-    // TODO: Tree wither animation
-    // TODO: Remove petal particle effects
-  },
-  onUpdate: (_deltaTime: number) => {
-    // Spring state continuous update logic
-    // TODO: Update petal falling effects
+/**
+ * Apply the initial mask config (called on init, since onEnter doesn't fire)
+ */
+export function applyInitialMaskConfig(maskState: MaskState): void {
+  const config = maskRegistry[maskState]
+  console.log(`[${maskState}] Applying initial config`)
+  applyMaskConfig(config, true)
+  config.onEnter?.(maskState) // from=self on init
+}
+
+/**
+ * Apply "playing" camera mode
+ */
+export function applyPlayingCamera(): void {
+  gameStore.set(cameraViewAngleAtom, PLAYING_CAMERA.viewAngle)
+  gameStore.set(cameraDistanceAtom, PLAYING_CAMERA.distance)
+}
+
+/**
+ * Restore current mask's camera settings (for returning to menu)
+ */
+export function restoreCurrentMaskCamera(): void {
+  const currentMask = gameStore.get(maskStateAtom)
+  const config = maskRegistry[currentMask]
+  if (config.cameraDistance !== undefined) {
+    gameStore.set(cameraDistanceAtom, config.cameraDistance)
+  }
+  if (config.cameraViewAngle !== undefined) {
+    gameStore.set(cameraViewAngleAtom, config.cameraViewAngle)
   }
 }
 
-// ============== AutumnMask Callbacks ==============
-export const autumnMaskCallbacks: MaskStateCallbacks = {
-  onEnter: (from: MaskState) => {
-    console.log(`[AutumnMask] Entering autumn mask state, from: ${from}`)
-    // 切换到 retro 风格
-    gameStore.set(visualStyleAtom, 'retro')
-    // TODO: Switch to autumn shader (warm tones)
-    // TODO: Start falling leaves effect
-    // TODO: Leaves color change
-  },
-  onExit: (to: MaskState) => {
-    console.log(`[AutumnMask] Leaving autumn mask state, to: ${to}`)
-    // TODO: Stop falling leaves effect
-  },
-  onUpdate: (_deltaTime: number) => {
-    // Autumn state continuous update logic
-    // TODO: Update falling leaves physics
-  }
-}
+/**
+ * Create callbacks for a mask state from its config
+ */
+function createCallbacks(maskState: MaskState): MaskStateCallbacks {
+  return {
+    onEnter: (from: MaskState) => {
+      const config = maskRegistry[maskState]
 
-// ============== StormMask Callbacks ==============
-export const stormMaskCallbacks: MaskStateCallbacks = {
-  onEnter: (from: MaskState) => {
-    console.log(`[StormMask] Entering storm mask state, from: ${from}`)
-    // 切换到 cyberpunk 风格
-    gameStore.set(visualStyleAtom, 'cyberpunk')
-    // TODO: Switch to storm shader (dark tones, lightning effects)
-    // TODO: Add wind force affecting player movement
-    // TODO: Start rain/lightning particle effects
-    // TODO: Play storm sound effects
-  },
-  onExit: (to: MaskState) => {
-    console.log(`[StormMask] Leaving storm mask state, to: ${to}`)
-    // TODO: Remove wind force effect
-    // TODO: Stop storm particles
-    // TODO: Stop storm sound effects
-  },
-  onUpdate: (_deltaTime: number) => {
-    // Storm state continuous update logic
-    // TODO: Update wind direction
-    // TODO: Trigger random lightning
-  }
-}
+      // Check if game is playing - if so, don't override camera
+      const gameState = gameStore.get(gameStateAtom)
+      const applyCamera = gameState !== 'playing'
 
-// ============== FinalMask Callbacks ==============
-export const finalMaskCallbacks: MaskStateCallbacks = {
-  onEnter: (from: MaskState) => {
-    console.log(`[FinalMask] Entering final mask state, from: ${from}`)
-    // 切换到 neon 风格
-    gameStore.set(visualStyleAtom, 'neon')
-    // TODO: Switch to final shader (special visual effects)
-    // TODO: Start ultimate effects
-    // TODO: Possible gameplay mechanic changes
-  },
-  onExit: (to: MaskState) => {
-    console.log(`[FinalMask] Leaving final mask state, to: ${to}`)
-    // TODO: Restore normal effects
-  },
-  onUpdate: (_deltaTime: number) => {
-    // Final state continuous update logic
+      console.log(`[${maskState}] Entering, from: ${from}, gameState: ${gameState}, applyCamera: ${applyCamera}`)
+      console.log(`[${maskState}] Config:`, config)
+
+      applyMaskConfig(config, applyCamera)
+      config.onEnter?.(from)
+    },
+    onExit: (to: MaskState) => {
+      const config = maskRegistry[maskState]
+      console.log(`[${maskState}] Leaving, to: ${to}`)
+      config.onExit?.(to)
+    },
+    onUpdate: (deltaTime: number) => {
+      const config = maskRegistry[maskState]
+      config.onUpdate?.(deltaTime)
+    },
   }
 }
 
 // ============== All Callbacks Collection ==============
 export const allMaskCallbacks: Record<MaskState, MaskStateCallbacks> = {
-  NoMask: noMaskCallbacks,
-  SpringMask: springMaskCallbacks,
-  AutumnMask: autumnMaskCallbacks,
-  StormMask: stormMaskCallbacks,
-  FinalMask: finalMaskCallbacks
+  NoMask: createCallbacks('NoMask'),
+  SpringMask: createCallbacks('SpringMask'),
+  AutumnMask: createCallbacks('AutumnMask'),
+  StormMask: createCallbacks('StormMask'),
+  FinalMask: createCallbacks('FinalMask'),
 }

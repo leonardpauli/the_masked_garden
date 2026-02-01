@@ -1,6 +1,7 @@
 import { gameStore } from '../store'
 import { gameStateAtom, scoreAtom } from '../store/atoms/gameAtoms'
 import { resetPlayer } from './playerActions'
+import { applyPlayingCamera, restoreCurrentMaskCamera } from '../masksys/maskCallbacks'
 import type { GameState } from '../types/game'
 
 export function setGameState(state: GameState): void {
@@ -11,6 +12,9 @@ export function startGame(): void {
   resetPlayer()
   gameStore.set(scoreAtom, 0)
   gameStore.set(gameStateAtom, 'playing')
+
+  // Animate camera to gameplay view
+  applyPlayingCamera()
 }
 
 export function pauseGame(): void {
@@ -40,4 +44,7 @@ export function resetGame(): void {
   resetPlayer()
   gameStore.set(scoreAtom, 0)
   gameStore.set(gameStateAtom, 'menu')
+
+  // Restore current mask's camera settings
+  restoreCurrentMaskCamera()
 }

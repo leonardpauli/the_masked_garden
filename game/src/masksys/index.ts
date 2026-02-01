@@ -18,13 +18,15 @@ export { MaskStateMachine } from './MaskStateMachine'
 
 // Callback functions
 export {
-  noMaskCallbacks,
-  springMaskCallbacks,
-  autumnMaskCallbacks,
-  stormMaskCallbacks,
-  finalMaskCallbacks,
-  allMaskCallbacks
+  allMaskCallbacks,
+  applyInitialMaskConfig,
+  applyPlayingCamera,
+  restoreCurrentMaskCamera,
 } from './maskCallbacks'
+
+// Mask registry
+export { maskRegistry, defineMask } from './masks'
+export type { MaskConfig } from './masks'
 
 // Action functions
 export {

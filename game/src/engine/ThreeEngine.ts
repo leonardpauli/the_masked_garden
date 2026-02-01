@@ -15,6 +15,11 @@ import { WaterMaterial } from '../materials/WaterMaterial'
 import { CapeMaterial } from '../materials/CapeMaterial'
 import { createEffect, EdgeDetectionEffect } from '../effects'
 import type { VisualEffectType } from '../types/visualStyles'
+import { createMaskMesh, getMaskColor } from '../geometry/MaskGeometry'
+import { maskPickupsAtom, type MaskPickup } from '../store/atoms/maskPickupAtoms'
+import { changeMaskState, getCurrentMaskState } from '../masksys'
+import type { MaskState } from '../masksys'
+import { presets } from '../audio/presets'
 
 /**
  * Pure Three.js engine - no React dependencies
@@ -96,6 +101,23 @@ export class ThreeEngine {
   private currentEffectPass: EffectPass | null = null
   private currentEffect: Effect | null = null
 
+  // Mask pickups
+  private maskPickups: Map<string, {
+    mesh: THREE.Mesh
+    type: MaskState
+    baseY: number
+    collecting: boolean
+    collectProgress: number
+    immuneUntil: number  // Timestamp when immunity expires (prevents pickup loops)
+  }> = new Map()
+  private maskPickupRadius = 1.5   // Distance to trigger pickup
+  private maskHoverHeight = 0.8    // Height above ground (lowered)
+  private maskBobAmplitude = 0.15  // Bob up/down amount
+  private maskBobFrequency = 0.25  // Bob cycles per second (slowed 4x)
+  private maskRotationSpeed = 0.5  // Radians per second
+  private maskCollectDuration = 0.3 // Seconds to collect animation
+  private maskDropImmunity = 1.0   // Seconds of immunity after dropping a mask
+
   constructor(container: HTMLElement) {
     // Initialize renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -141,6 +163,9 @@ export class ThreeEngine {
 
     // Initialize physics
     this.physics.init()
+
+    // Spawn mask pickups
+    this.spawnMaskPickups()
 
     // Subscribe to store changes
     this.subscribeToStore()
@@ -544,6 +569,181 @@ export class ThreeEngine {
     })
   }
 
+  private spawnMaskPickups(): void {
+    const maskTypes: MaskState[] = ['SpringMask', 'AutumnMask', 'StormMask', 'FinalMask']
+    const spread = 50          // Max distance from center
+    const centerExclusion = 3  // Avoid spawning too close to center
+    const pickups: MaskPickup[] = []
+
+    for (const maskType of maskTypes) {
+      // Generate random position avoiding center
+      let x: number, z: number
+      let attempts = 0
+      const maxAttempts = 100
+
+      do {
+        x = (Math.random() - 0.5) * spread * 2
+        z = (Math.random() - 0.5) * spread * 2
+        attempts++
+      } while (
+        (Math.abs(x) < centerExclusion && Math.abs(z) < centerExclusion) &&
+        attempts < maxAttempts
+      )
+
+      const id = `mask-${maskType}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      const position = { x, y: this.maskHoverHeight, z }
+
+      // Create the visual mesh
+      const color = getMaskColor(maskType)
+      const mesh = createMaskMesh(color)
+      mesh.position.set(x, this.maskHoverHeight, z)
+      // Rotate so mask faces outward (eye holes visible from sides)
+      mesh.rotation.set(0, 0, 0)
+      this.scene.add(mesh)
+
+      // Store in local map
+      this.maskPickups.set(id, {
+        mesh,
+        type: maskType,
+        baseY: this.maskHoverHeight,
+        collecting: false,
+        collectProgress: 0,
+        immuneUntil: 0
+      })
+
+      // Store in atom for potential external access
+      pickups.push({
+        id,
+        position,
+        maskType,
+        collected: false
+      })
+    }
+
+    gameStore.set(maskPickupsAtom, pickups)
+  }
+
+  private dropMaskAtPosition(maskType: MaskState, x: number, z: number, currentTime: number): void {
+    const id = `mask-${maskType}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+    // Create the visual mesh
+    const color = getMaskColor(maskType)
+    const mesh = createMaskMesh(color)
+    mesh.position.set(x, this.maskHoverHeight, z)
+    // Rotate so mask faces outward (eye holes visible from sides)
+    mesh.rotation.set(0, 0, 0)
+    this.scene.add(mesh)
+
+    // Store in local map with immunity period to prevent immediate re-pickup
+    this.maskPickups.set(id, {
+      mesh,
+      type: maskType,
+      baseY: this.maskHoverHeight,
+      collecting: false,
+      collectProgress: 0,
+      immuneUntil: currentTime + this.maskDropImmunity
+    })
+
+    // Update atom
+    const currentPickups = gameStore.get(maskPickupsAtom)
+    gameStore.set(maskPickupsAtom, [
+      ...currentPickups,
+      {
+        id,
+        position: { x, y: this.maskHoverHeight, z },
+        maskType,
+        collected: false
+      }
+    ])
+  }
+
+  private updateMaskPickups(deltaTime: number, time: number): void {
+    if (!this.player) return
+
+    const playerPos = this.player.position
+
+    for (const [id, pickup] of this.maskPickups) {
+      // If collecting, animate toward player head
+      if (pickup.collecting) {
+        pickup.collectProgress += deltaTime / this.maskCollectDuration
+
+        if (pickup.collectProgress >= 1) {
+          // Collection complete - remove mask and trigger state change
+          this.scene.remove(pickup.mesh)
+          pickup.mesh.geometry.dispose()
+          if (pickup.mesh.material instanceof THREE.Material) {
+            pickup.mesh.material.dispose()
+          }
+          this.maskPickups.delete(id)
+
+          // Update atom
+          const currentPickups = gameStore.get(maskPickupsAtom)
+          gameStore.set(maskPickupsAtom, currentPickups.map(p =>
+            p.id === id ? { ...p, collected: true } : p
+          ))
+
+          // Trigger mask state change
+          changeMaskState(pickup.type)
+          continue
+        }
+
+        // Animate: scale down and move toward player head
+        const t = pickup.collectProgress
+        const easeOut = 1 - Math.pow(1 - t, 3)  // Cubic ease out
+
+        // Target is player head position (roughly)
+        const targetY = playerPos.y + 1.2  // Head height
+        const startY = pickup.baseY
+
+        pickup.mesh.position.x += (playerPos.x - pickup.mesh.position.x) * easeOut * 0.3
+        pickup.mesh.position.y = startY + (targetY - startY) * easeOut
+        pickup.mesh.position.z += (playerPos.z - pickup.mesh.position.z) * easeOut * 0.3
+
+        // Scale down
+        const scale = 1 - easeOut * 0.7
+        pickup.mesh.scale.setScalar(scale)
+
+        continue
+      }
+
+      // Normal floating animation
+      const bobOffset = Math.sin(time * this.maskBobFrequency * Math.PI * 2) * this.maskBobAmplitude
+      pickup.mesh.position.y = pickup.baseY + bobOffset
+
+      // Rotate around Y axis
+      pickup.mesh.rotation.y += this.maskRotationSpeed * deltaTime
+
+      // Skip pickup check if mask is immune (recently dropped)
+      if (pickup.immuneUntil > time) {
+        continue
+      }
+
+      // Check proximity to player
+      const dx = pickup.mesh.position.x - playerPos.x
+      const dz = pickup.mesh.position.z - playerPos.z
+      const distance = Math.sqrt(dx * dx + dz * dz)
+
+      if (distance < this.maskPickupRadius) {
+        // Player is close enough - start collecting
+        const currentMask = getCurrentMaskState()
+
+        // If wearing a mask, drop it first
+        if (currentMask !== 'NoMask') {
+          this.dropMaskAtPosition(currentMask, playerPos.x, playerPos.z + 1, time)
+        }
+
+        pickup.collecting = true
+        pickup.collectProgress = 0
+
+        // Play swoosh sound effect
+        const swoosh = presets.find(p => p.id === 'swoosh')
+        if (swoosh) {
+          swoosh.play()
+        }
+      }
+    }
+  }
+
   private updateHitboxVisualization(): void {
     // Remove existing hitbox group
     if (this.hitboxGroup) {
@@ -923,6 +1123,10 @@ export class ThreeEngine {
     // Update ghost players (other online players)
     this.updateGhostPlayers(deltaTime)
 
+    // Update mask pickups (animate and check for collection)
+    const timeSeconds = now / 1000
+    this.updateMaskPickups(deltaTime, timeSeconds)
+
     // Update particle system
     this.particleSystem.update(deltaTime)
 
@@ -971,6 +1175,16 @@ export class ThreeEngine {
     }
     this.ghostPlayers.clear()
     this.ghostPlayerGeometry?.dispose()
+
+    // Dispose mask pickups
+    for (const [, pickup] of this.maskPickups) {
+      this.scene.remove(pickup.mesh)
+      pickup.mesh.geometry.dispose()
+      if (pickup.mesh.material instanceof THREE.Material) {
+        pickup.mesh.material.dispose()
+      }
+    }
+    this.maskPickups.clear()
 
     // Dispose of Three.js resources
     this.obstacles.forEach(obj => {
