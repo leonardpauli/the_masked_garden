@@ -12,7 +12,7 @@ const FOOTSTEP_FILES = [
 
 const STEP_INTERVAL = 0.35 // seconds between footsteps
 const PITCH_VARIATION = 0.15 // +/- 15% pitch variation
-const VOLUME = 0.4
+const VOLUME = 0.1
 
 class FootstepsAudio {
   private samples: LoadedSample[] = []
