@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { EffectComposer, EffectPass, RenderPass } from 'postprocessing'
 import { gameStore } from '../store'
 import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, cameraTransitionSpeedAtom, gravityAtom, treeColorVariationAtom, groundVibranceAtom, waterShaderScaleAtom, showHitboxesAtom } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, type VisualStyleConfig } from '../types/visualStyles'
@@ -12,6 +13,7 @@ import { ParticleSystem } from '../particles/ParticleSystem'
 import { PhysicsWorld } from '../physics/PhysicsWorld'
 import { WaterMaterial } from '../materials/WaterMaterial'
 import { CapeMaterial } from '../materials/CapeMaterial'
+import { EdgeDetectionEffect } from '../effects/EdgeDetectionEffect'
 
 /**
  * Pure Three.js engine - no React dependencies
@@ -87,6 +89,12 @@ export class ThreeEngine {
   private ghostSpringStiffness = 15
   private ghostDampingRatio = 1.0
 
+  // Postprocessing
+  private composer: EffectComposer
+  private edgeDetectionEffect: EdgeDetectionEffect | null = null
+  private edgeDetectionPass: EffectPass | null = null
+  private useEdgeDetection = false
+
   constructor(container: HTMLElement) {
     // Initialize renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true })
@@ -113,7 +121,11 @@ export class ThreeEngine {
     this.groundMaterial = new THREE.MeshStandardMaterial({ color: '#3a5a3a' })
     this.playerMaterial = new THREE.MeshToonMaterial({ color: '#4488ff' })
 
-    // Apply initial visual style
+    // Initialize postprocessing composer
+    this.composer = new EffectComposer(this.renderer)
+    this.composer.addPass(new RenderPass(this.scene, this.camera))
+
+    // Apply initial visual style (sets up edge detection if needed)
     this.applyVisualStyle(visualStyleConfigs[gameStore.get(visualStyleAtom)])
 
     // Setup scene
@@ -156,6 +168,31 @@ export class ThreeEngine {
 
     // Player
     this.playerMaterial.color.set(config.playerColor)
+
+    // Edge detection postprocessing
+    this.useEdgeDetection = config.edgeDetection ?? false
+
+    if (this.useEdgeDetection) {
+      // Create edge detection effect if not exists
+      if (!this.edgeDetectionEffect) {
+        this.edgeDetectionEffect = new EdgeDetectionEffect({
+          edgeColor: config.edgeColor ?? '#000000',
+          threshold: config.edgeThreshold ?? 0.1,
+        })
+        this.edgeDetectionPass = new EffectPass(this.camera, this.edgeDetectionEffect)
+        this.composer.addPass(this.edgeDetectionPass)
+      } else {
+        // Update existing effect settings
+        this.edgeDetectionEffect.edgeColor = config.edgeColor ?? '#000000'
+        this.edgeDetectionEffect.threshold = config.edgeThreshold ?? 0.1
+      }
+    } else if (this.edgeDetectionPass) {
+      // Remove edge detection pass when disabled
+      this.composer.removePass(this.edgeDetectionPass)
+      this.edgeDetectionEffect?.dispose()
+      this.edgeDetectionEffect = null
+      this.edgeDetectionPass = null
+    }
   }
 
   private setupScene(): void {
@@ -693,6 +730,7 @@ export class ThreeEngine {
     this.camera.aspect = container.clientWidth / container.clientHeight
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(container.clientWidth, container.clientHeight)
+    this.composer.setSize(container.clientWidth, container.clientHeight)
   }
 
   private animate = (): void => {
@@ -866,8 +904,12 @@ export class ThreeEngine {
       this.waterMaterial.update(deltaTime)
     }
 
-    // Render
-    this.renderer.render(this.scene, this.camera)
+    // Render (use composer for postprocessing effects)
+    if (this.useEdgeDetection) {
+      this.composer.render()
+    } else {
+      this.renderer.render(this.scene, this.camera)
+    }
   }
 
   start(): void {
@@ -936,6 +978,8 @@ export class ThreeEngine {
 
     this.playerMaterial.dispose()
     this.capeMaterial?.dispose()
+    this.edgeDetectionEffect?.dispose()
+    this.composer.dispose()
     this.renderer.dispose()
 
     // Remove canvas from DOM

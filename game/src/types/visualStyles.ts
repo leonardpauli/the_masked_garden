@@ -9,6 +9,7 @@ export type VisualStyle =
   | 'pastel'
   | 'fire'
   | 'ocean'
+  | 'sketch'
 
 export interface VisualStyleConfig {
   name: string
@@ -26,6 +27,9 @@ export interface VisualStyleConfig {
   saturation: number
   contrast: number
   brightness: number
+  edgeDetection?: boolean
+  edgeColor?: string
+  edgeThreshold?: number
 }
 
 export const visualStyleConfigs: Record<VisualStyle, VisualStyleConfig> = {
@@ -199,6 +203,26 @@ export const visualStyleConfigs: Record<VisualStyle, VisualStyleConfig> = {
     contrast: 1.1,
     brightness: 0.95,
   },
+  sketch: {
+    name: 'Sketch',
+    backgroundColor: '#f5f5f0',
+    fogColor: '#f5f5f0',
+    fogNear: 30,
+    fogFar: 80,
+    groundColor: '#e8e8e0',
+    ambientIntensity: 0.8,
+    ambientColor: '#ffffff',
+    directionalIntensity: 0.6,
+    directionalColor: '#ffffff',
+    obstacleColors: ['#d0d0c8', '#c8c8c0', '#e0e0d8', '#d8d8d0', '#c0c0b8', '#e8e8e0'],
+    playerColor: '#a0a098',
+    saturation: 0.1,
+    contrast: 0.8,
+    brightness: 1.1,
+    edgeDetection: true,
+    edgeColor: '#1a1a1a',
+    edgeThreshold: 0.08,
+  },
 }
 
 export const visualStyleOptions: VisualStyle[] = [
@@ -212,4 +236,5 @@ export const visualStyleOptions: VisualStyle[] = [
   'pastel',
   'fire',
   'ocean',
+  'sketch',
 ]
