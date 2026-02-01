@@ -1,15 +1,16 @@
 import { atom } from 'jotai/vanilla'
 import type { VisualStyle } from '../../types/visualStyles'
+import { getDefault } from '../loadDefaults'
 
 // Player config
-export const playerSpeedAtom = atom<number>(8)
-export const playerScaleAtom = atom<number>(0.5)
+export const playerSpeedAtom = atom<number>(getDefault('playerSpeed', 8))
+export const playerScaleAtom = atom<number>(getDefault('playerScale', 0.5))
 export const playerDampingAtom = atom<number>(3)
 
 // Camera config (target values - what sliders control)
-export const cameraDistanceAtom = atom<number>(14)
+export const cameraDistanceAtom = atom<number>(getDefault('cameraDistance', 14))
 export const cameraSmoothingAtom = atom<number>(0.1) // For player-following smoothness
-export const cameraViewAngleAtom = atom<number>(43) // 0 = top-down, 70 = third-person
+export const cameraViewAngleAtom = atom<number>(getDefault('cameraViewAngle', 43)) // 0 = top-down, 70 = third-person
 export const cameraTransitionSpeedAtom = atom<number>(0.05) // For preset/slider transitions
 
 // Camera presets
@@ -54,7 +55,7 @@ export const cameraPresetsWithPersistAtom = atom(
 )
 
 // Physics config
-export const gravityAtom = atom<number>(20)
+export const gravityAtom = atom<number>(getDefault('gravity', 20))
 
 // Game config
 export const collisionCooldownAtom = atom<number>(500)
@@ -64,17 +65,20 @@ export const damageAmountAtom = atom<number>(10)
 export const healthEnabledAtom = atom<boolean>(false)
 export const scoreEnabledAtom = atom<boolean>(false)
 
+// Debug visualization
+export const showHitboxesAtom = atom<boolean>(false)
+
 // Visual style config
 export const visualStyleAtom = atom<VisualStyle>('default')
 
 // Tree colors
-export const treeColorVariationAtom = atom<number>(1) // 0-1 range
+export const treeColorVariationAtom = atom<number>(getDefault('treeColorVariation', 1)) // 0-1 range
 
 // Ground color (0 = dull grey-green, 1 = neon green)
-export const groundVibranceAtom = atom<number>(0)
+export const groundVibranceAtom = atom<number>(getDefault('groundVibrance', 0))
 
 // Water shader
-export const waterShaderScaleAtom = atom<number>(4) // UV scale for wave pattern
+export const waterShaderScaleAtom = atom<number>(getDefault('waterShaderScale', 4)) // UV scale for wave pattern
 
 // Dev panel visibility (persisted to localStorage, default closed)
 function loadDevPanelOpen(): boolean {

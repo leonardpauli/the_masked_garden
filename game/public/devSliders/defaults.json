@@ -1,0 +1,10 @@
+{
+  "playerSpeed": 8,
+  "playerScale": 0.5,
+  "cameraDistance": 14,
+  "cameraViewAngle": 43,
+  "gravity": 20,
+  "waterShaderScale": 3.6,
+  "groundVibrance": 0,
+  "treeColorVariation": 1
+}

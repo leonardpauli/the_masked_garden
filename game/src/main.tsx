@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { App } from './App'
+import { loadSliderDefaults } from './store/loadDefaults'
 
 // Hide loading spinner once React renders
 const hideLoading = () => {
@@ -11,13 +11,19 @@ const hideLoading = () => {
   }
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-)
+// Load defaults before importing App (which imports atoms)
+loadSliderDefaults().then(async () => {
+  // Dynamic import to ensure defaults are loaded before atoms are created
+  const { App } = await import('./App')
 
-// Hide loading after a short delay to ensure first paint
-requestAnimationFrame(() => {
-  requestAnimationFrame(hideLoading)
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  )
+
+  // Hide loading after a short delay to ensure first paint
+  requestAnimationFrame(() => {
+    requestAnimationFrame(hideLoading)
+  })
 })

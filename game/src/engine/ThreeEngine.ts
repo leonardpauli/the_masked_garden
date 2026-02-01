@@ -1,14 +1,15 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { gameStore } from '../store'
-import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, cameraTransitionSpeedAtom, gravityAtom, collisionCooldownAtom, damageAmountAtom, treeColorVariationAtom, groundVibranceAtom, waterShaderScaleAtom } from '../store/atoms/configAtoms'
+import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, cameraTransitionSpeedAtom, gravityAtom, treeColorVariationAtom, groundVibranceAtom, waterShaderScaleAtom, showHitboxesAtom } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, type VisualStyleConfig } from '../types/visualStyles'
 import { inputDirectionAtom } from '../store/atoms/inputAtoms'
 import { gameStateAtom } from '../store/atoms/gameAtoms'
 import { playerColorHueAtom, jumpRequestedAtom, jumpEnergyAtom, playerPositionAtom } from '../store/atoms/playerAtoms'
 import { otherPlayersAtom } from '../store/atoms/onlineAtoms'
-import { setPlayerPosition, takeDamage, clearJumpRequest, setJumpEnergy, setGrounded } from '../actions/playerActions'
+import { setPlayerPosition, clearJumpRequest, setJumpEnergy, setGrounded } from '../actions/playerActions'
 import { ParticleSystem } from '../particles/ParticleSystem'
+import { PhysicsWorld } from '../physics/PhysicsWorld'
 import { WaterMaterial } from '../materials/WaterMaterial'
 import { CapeMaterial } from '../materials/CapeMaterial'
 
@@ -37,7 +38,6 @@ export class ThreeEngine {
   private playerVelocity = new THREE.Vector3(0, 0, 0)
   private playerRadius = 0.5 // Approximate player collision radius
   private groundLevel = 0.5 // Y position when on ground
-  private lastCollisionTime = 0
   private lastTime = 0
 
   // Jump physics
@@ -55,6 +55,9 @@ export class ThreeEngine {
 
   // Particle system
   private particleSystem: ParticleSystem
+
+  // Physics
+  private physics: PhysicsWorld = new PhysicsWorld()
   private lastFootstepTime = 0
   private footstepInterval = 0.15 // Emit footstep particles every 150ms when moving
 
@@ -62,6 +65,15 @@ export class ThreeEngine {
   private groundMaterial: THREE.MeshStandardMaterial
   private playerMaterial: THREE.MeshToonMaterial
   private waterMaterial: WaterMaterial | null = null
+
+  // Hitbox debug visualization
+  private hitboxGroup: THREE.Group | null = null
+  private hitboxMaterial: THREE.MeshBasicMaterial = new THREE.MeshBasicMaterial({
+    color: 0xff0000,
+    wireframe: true,
+    transparent: true,
+    opacity: 0.6
+  })
 
   // Ghost players (other online players)
   private ghostPlayers: Map<number, {
@@ -112,6 +124,9 @@ export class ThreeEngine {
     this.loadWell(8, 8)
     // Initialize particle system
     this.particleSystem = new ParticleSystem(this.scene, 500)
+
+    // Initialize physics
+    this.physics.init()
 
     // Subscribe to store changes
     this.subscribeToStore()
@@ -322,6 +337,9 @@ export class ThreeEngine {
         this.obstacles.push(tree)
         this.obstacleRadii.push(scale)
         this.scene.add(tree)
+
+        // Add physics collider for tree
+        this.physics.addTreeCollider(`tree-${i}`, x, z, scale)
       }
     }
 
@@ -363,6 +381,9 @@ export class ThreeEngine {
       // Add to obstacles for collision
       this.obstacles.push(well)
       this.obstacleRadii.push(wellRadius)
+
+      // Add physics collider for well
+      this.physics.addWellCollider(x, z)
     })
 
     // Load water surface with animated shader
@@ -380,6 +401,43 @@ export class ThreeEngine {
       water.position.set(x, 1, z)
       this.scene.add(water)
     })
+  }
+
+  private updateHitboxVisualization(): void {
+    // Remove existing hitbox group
+    if (this.hitboxGroup) {
+      this.hitboxGroup.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose()
+        }
+      })
+      this.scene.remove(this.hitboxGroup)
+      this.hitboxGroup = null
+    }
+
+    // Check if hitboxes should be shown
+    const showHitboxes = gameStore.get(showHitboxesAtom)
+    if (!showHitboxes) return
+
+    // Create new group for hitbox wireframes
+    this.hitboxGroup = new THREE.Group()
+
+    // Get all colliders from physics world
+    const colliders = this.physics.getColliders()
+
+    for (const [, collider] of colliders) {
+      const geometry = new THREE.CylinderGeometry(
+        collider.radius,
+        collider.radius,
+        collider.height,
+        16
+      )
+      const mesh = new THREE.Mesh(geometry, this.hitboxMaterial)
+      mesh.position.set(collider.x, collider.height / 2, collider.z)
+      this.hitboxGroup.add(mesh)
+    }
+
+    this.scene.add(this.hitboxGroup)
   }
 
   private subscribeToStore(): void {
@@ -423,6 +481,12 @@ export class ThreeEngine {
       }
     })
     this.unsubscribers.push(unsubGameState)
+
+    // Subscribe to hitbox visibility toggle
+    const unsubHitboxes = gameStore.sub(showHitboxesAtom, () => {
+      this.updateHitboxVisualization()
+    })
+    this.unsubscribers.push(unsubHitboxes)
   }
 
   private updateGhostPlayers(deltaTime: number): void {
@@ -501,49 +565,17 @@ export class ThreeEngine {
   }
 
   private checkObstacleCollisions(): void {
-    if (!this.player) return
+    if (!this.player || !this.physics.isReady()) return
 
-    const now = Date.now()
-    const cooldown = gameStore.get(collisionCooldownAtom)
+    const result = this.physics.checkPlayerCollisions(
+      this.player.position.x,
+      this.player.position.z,
+      this.playerRadius
+    )
 
-    // Skip if still in cooldown
-    if (now - this.lastCollisionTime < cooldown) return
-
-    const playerPos = this.player.position
-
-    for (let i = 0; i < this.obstacles.length; i++) {
-      const obstacle = this.obstacles[i]
-      const obstacleRadius = this.obstacleRadii[i]
-
-      // Calculate distance between player and obstacle (only XZ plane for simplicity)
-      const dx = playerPos.x - obstacle.position.x
-      const dz = playerPos.z - obstacle.position.z
-      const distance = Math.sqrt(dx * dx + dz * dz)
-
-      // Check if collision occurred
-      const collisionDistance = this.playerRadius + obstacleRadius
-      if (distance < collisionDistance) {
-        // Collision detected - apply damage
-        this.lastCollisionTime = now
-        const damage = gameStore.get(damageAmountAtom)
-        takeDamage(damage)
-
-        // Emit damage particles at collision point
-        this.particleSystem.emit(playerPos, 'damage')
-
-        // Push player away from obstacle
-        if (distance > 0.01) {
-          const pushStrength = (collisionDistance - distance) + 0.5
-          this.player.position.x += (dx / distance) * pushStrength
-          this.player.position.z += (dz / distance) * pushStrength
-
-          // Also apply velocity in the push direction
-          this.playerVelocity.x = (dx / distance) * 3
-          this.playerVelocity.z = (dz / distance) * 3
-        }
-
-        break // Only handle one collision per frame
-      }
+    if (result.blocked) {
+      this.player.position.x += result.pushX
+      this.player.position.z += result.pushZ
     }
   }
 
@@ -783,6 +815,17 @@ export class ThreeEngine {
 
     // Dispose particle system
     this.particleSystem.dispose()
+
+    // Dispose hitbox visualization
+    if (this.hitboxGroup) {
+      this.hitboxGroup.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose()
+        }
+      })
+      this.scene.remove(this.hitboxGroup)
+    }
+    this.hitboxMaterial.dispose()
 
     this.playerMaterial.dispose()
     this.capeMaterial?.dispose()

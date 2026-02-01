@@ -1,0 +1,270 @@
+================================================================================
+SESSION LOG - Masked Garden Game Project
+Date: 2026-02-01 14:00
+Session Focus: Collision System Rework + Config File System
+================================================================================
+
+PROJECT LOCATION: c:\GameJam\MaskedGarden\game\
+
+
+================================================================================
+EXECUTION SUMMARY (QUICK START)
+================================================================================
+
+STEP 1: Install Rapier
+  cd game && pnpm add @dimforge/rapier3d-compat
+
+STEP 2: Create game/src/physics/PhysicsWorld.ts (Rapier wrapper)
+
+STEP 3: Create game/public/devSliders/defaults.json
+
+STEP 4: Create game/src/store/loadDefaults.ts
+
+STEP 5: Modify game/src/engine/ThreeEngine.ts
+  - Import PhysicsWorld
+  - Remove takeDamage() and damage particles from checkObstacleCollisions()
+  - Add physics.addTreeCollider() in generateObstacles()
+  - Add physics.addWellCollider() in loadWell()
+  - Replace collision logic with physics.checkPlayerCollisions()
+
+STEP 6: Modify game/src/store/atoms/configAtoms.ts
+  - Import getDefault from loadDefaults
+  - Replace hardcoded defaults with getDefault('key', fallback)
+
+STEP 7: Modify game/src/main.tsx
+  - Load defaults before app render
+
+
+================================================================================
+CHANGES TO MAKE THIS SESSION
+================================================================================
+
+1. INACTIVATE DAMAGE SYSTEM
+---------------------------
+Remove damage from collision - keep only pushback.
+
+File: game/src/engine/ThreeEngine.ts (~line 530)
+  - DELETE: takeDamage(damage)
+  - DELETE: this.particleSystem.emit(playerPos, 'damage')
+
+
+2. RAPIER PHYSICS INTEGRATION
+-----------------------------
+Replace manual sphere collision with Rapier cylinder colliders.
+
+New Dependency:
+  pnpm add @dimforge/rapier3d-compat
+
+Files to Create:
+- game/src/physics/PhysicsWorld.ts (NEW)
+
+```typescript
+import RAPIER from '@dimforge/rapier3d-compat'
+
+export class PhysicsWorld {
+  private world!: RAPIER.World
+  private colliders: Map<string, RAPIER.Collider> = new Map()
+  private initialized = false
+
+  async init(): Promise<void> {
+    await RAPIER.init()
+    const gravity = { x: 0, y: -20, z: 0 }
+    this.world = new RAPIER.World(gravity)
+    this.initialized = true
+  }
+
+  isReady(): boolean {
+    return this.initialized
+  }
+
+  addTreeCollider(id: string, x: number, z: number, radius: number): void {
+    if (!this.initialized) return
+    const colliderDesc = RAPIER.ColliderDesc.cylinder(3, radius)
+      .setTranslation(x, 1.5, z)
+    const collider = this.world.createCollider(colliderDesc)
+    this.colliders.set(id, collider)
+  }
+
+  addWellCollider(x: number, z: number): void {
+    if (!this.initialized) return
+    const colliderDesc = RAPIER.ColliderDesc.cylinder(2, 2.5)
+      .setTranslation(x, 1, z)
+    const collider = this.world.createCollider(colliderDesc)
+    this.colliders.set('well', collider)
+  }
+
+  checkPlayerCollisions(
+    playerX: number,
+    playerZ: number,
+    playerRadius: number
+  ): { blocked: boolean; pushX: number; pushZ: number } {
+    if (!this.initialized) return { blocked: false, pushX: 0, pushZ: 0 }
+
+    // Simple sphere-cylinder intersection for each collider
+    for (const [, collider] of this.colliders) {
+      const pos = collider.translation()
+      const dx = playerX - pos.x
+      const dz = playerZ - pos.z
+      const dist = Math.sqrt(dx * dx + dz * dz)
+
+      // Get half-extents (radius for cylinder)
+      const shape = collider.shape
+      const obstacleRadius = shape.type === RAPIER.ShapeType.Cylinder
+        ? (shape as RAPIER.Cylinder).radius
+        : 1
+
+      const minDist = playerRadius + obstacleRadius
+      if (dist < minDist && dist > 0.01) {
+        const overlap = minDist - dist
+        return {
+          blocked: true,
+          pushX: (dx / dist) * overlap,
+          pushZ: (dz / dist) * overlap,
+        }
+      }
+    }
+    return { blocked: false, pushX: 0, pushZ: 0 }
+  }
+}
+```
+
+
+3. CONFIG FILE SYSTEM
+---------------------
+Load slider defaults from JSON file at startup.
+
+Files to Create:
+- game/public/devSliders/defaults.json (NEW)
+
+```json
+{
+  "playerSpeed": 8,
+  "playerScale": 0.5,
+  "cameraDistance": 14,
+  "cameraViewAngle": 43,
+  "gravity": 20,
+  "waterShaderScale": 3.6,
+  "groundVibrance": 0,
+  "treeColorVariation": 1
+}
+```
+
+- game/src/store/loadDefaults.ts (NEW)
+
+```typescript
+export interface SliderDefaults {
+  playerSpeed?: number
+  playerScale?: number
+  cameraDistance?: number
+  cameraViewAngle?: number
+  gravity?: number
+  waterShaderScale?: number
+  groundVibrance?: number
+  treeColorVariation?: number
+}
+
+let loadedDefaults: SliderDefaults = {}
+
+export async function loadSliderDefaults(): Promise<SliderDefaults> {
+  try {
+    const response = await fetch('/devSliders/defaults.json')
+    if (response.ok) {
+      loadedDefaults = await response.json()
+    }
+  } catch {
+    console.warn('Could not load slider defaults, using hardcoded values')
+  }
+  return loadedDefaults
+}
+
+export function getDefault<K extends keyof SliderDefaults>(
+  key: K,
+  fallback: NonNullable<SliderDefaults[K]>
+): NonNullable<SliderDefaults[K]> {
+  return (loadedDefaults[key] ?? fallback) as NonNullable<SliderDefaults[K]>
+}
+```
+
+
+================================================================================
+FILES SUMMARY
+================================================================================
+
+| Action | File                                  | Purpose                    |
+|--------|---------------------------------------|----------------------------|
+| Create | game/src/physics/PhysicsWorld.ts      | Rapier physics wrapper     |
+| Create | game/src/store/loadDefaults.ts        | Config file loader         |
+| Create | game/public/devSliders/defaults.json  | Default slider values      |
+| Modify | game/src/engine/ThreeEngine.ts        | Integrate physics, no dmg  |
+| Modify | game/src/store/atoms/configAtoms.ts   | Use getDefault()           |
+| Modify | game/src/main.tsx                     | Load defaults at startup   |
+| Modify | game/package.json                     | Add rapier3d-compat        |
+
+
+================================================================================
+THREEENGINE.TS MODIFICATIONS
+================================================================================
+
+1. Add import at top:
+   import { PhysicsWorld } from '../physics/PhysicsWorld'
+
+2. Add property:
+   private physics: PhysicsWorld = new PhysicsWorld()
+
+3. In constructor, after scene setup:
+   this.physics.init()
+
+4. In generateObstacles(), after tree is added to scene:
+   this.physics.addTreeCollider(`tree-${i}`, x, z, scale)
+
+5. In loadWell(), after well is added to scene:
+   this.physics.addWellCollider(x, z)
+
+6. Replace checkObstacleCollisions() body with:
+   if (!this.player || !this.physics.isReady()) return
+   const result = this.physics.checkPlayerCollisions(
+     this.player.position.x,
+     this.player.position.z,
+     this.playerRadius
+   )
+   if (result.blocked) {
+     this.player.position.x += result.pushX
+     this.player.position.z += result.pushZ
+   }
+
+
+================================================================================
+VERIFICATION
+================================================================================
+
+1. Collision Test:
+   - pnpm dev
+   - Walk toward tree -> pushed back, cannot walk through
+   - Walk toward well -> pushed back, cannot walk through
+   - No damage (no health changes, no red particles)
+   - Jump still works
+
+2. Config File Test:
+   - Edit game/public/devSliders/defaults.json
+   - Change waterShaderScale to 10
+   - Refresh -> water has more detailed ripples
+   - DevPanel shows 10 as default
+
+3. Console Check:
+   - No Rapier errors on load
+   - "Could not load slider defaults" only if file missing
+
+
+================================================================================
+HOW TO RUN
+================================================================================
+
+cd c:\GameJam\MaskedGarden\game
+pnpm dev
+
+Opens at: http://localhost:5173
+
+
+================================================================================
+END OF SESSION LOG
+================================================================================

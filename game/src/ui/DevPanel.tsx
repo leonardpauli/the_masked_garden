@@ -17,6 +17,7 @@ import {
   visualStyleAtom,
   healthEnabledAtom,
   scoreEnabledAtom,
+  showHitboxesAtom,
   treeColorVariationAtom,
   groundVibranceAtom,
   waterShaderScaleAtom,
@@ -108,6 +109,7 @@ export function DevPanel() {
   const [visualStyle, setVisualStyle] = useAtom(visualStyleAtom)
   const [healthEnabled, setHealthEnabled] = useAtom(healthEnabledAtom)
   const [scoreEnabled, setScoreEnabled] = useAtom(scoreEnabledAtom)
+  const [showHitboxes, setShowHitboxes] = useAtom(showHitboxesAtom)
   const [treeColorVariation, setTreeColorVariation] = useAtom(treeColorVariationAtom)
   const [groundVibrance, setGroundVibrance] = useAtom(groundVibranceAtom)
   const [waterShaderScale, setWaterShaderScale] = useAtom(waterShaderScaleAtom)
@@ -312,6 +314,11 @@ export function DevPanel() {
             label="Score System"
             checked={scoreEnabled}
             onChange={setScoreEnabled}
+          />
+          <Checkbox
+            label="Show Hitboxes"
+            checked={showHitboxes}
+            onChange={setShowHitboxes}
           />
 
           <h3>Environment</h3>
