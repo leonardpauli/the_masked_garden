@@ -5,11 +5,12 @@ import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAt
 import { visualStyleConfigs, type VisualStyleConfig } from '../types/visualStyles'
 import { inputDirectionAtom } from '../store/atoms/inputAtoms'
 import { gameStateAtom } from '../store/atoms/gameAtoms'
-import { playerHealthAtom, playerColorHueAtom } from '../store/atoms/playerAtoms'
-import { setPlayerPosition, takeDamage } from '../actions/playerActions'
-import { endGame } from '../actions/gameActions'
+import { playerColorHueAtom, jumpRequestedAtom, jumpEnergyAtom, playerPositionAtom } from '../store/atoms/playerAtoms'
+import { otherPlayersAtom } from '../store/atoms/onlineAtoms'
+import { setPlayerPosition, takeDamage, clearJumpRequest, setJumpEnergy, setGrounded } from '../actions/playerActions'
 import { ParticleSystem } from '../particles/ParticleSystem'
 import { WaterMaterial } from '../materials/WaterMaterial'
+import { CapeMaterial } from '../materials/CapeMaterial'
 
 /**
  * Pure Three.js engine - no React dependencies
@@ -21,7 +22,7 @@ export class ThreeEngine {
   private camera: THREE.PerspectiveCamera
   private animationId: number | null = null
   private unsubscribers: (() => void)[] = []
-  
+
   // Scene objects
   private ground: THREE.Mesh | null = null
   private obstacles: THREE.Object3D[] = []
@@ -31,7 +32,7 @@ export class ThreeEngine {
   private leavesTemplate: THREE.Group | null = null
   private ambientLight: THREE.AmbientLight | null = null
   private directionalLight: THREE.DirectionalLight | null = null
-  
+
   // Physics state
   private playerVelocity = new THREE.Vector3(0, 0, 0)
   private playerRadius = 0.5 // Approximate player collision radius
@@ -39,19 +40,40 @@ export class ThreeEngine {
   private lastCollisionTime = 0
   private lastTime = 0
 
+  // Jump physics
+  private jumpImpulse = 10 // Base jump strength
+  private jumpEnergyPerJump = 0.60 // Each jump uses 60% of available energy
+  private energyRechargeRateGrounded = 0.8 // Recharge rate when on ground (full in ~1.25s)
+  private energyRechargeRateAir = 0.15 // Slow recharge in air
+
   // Camera smoothing state (current values that smooth toward targets)
   private currentCameraDistance = 14
   private currentCameraViewAngle = 43
-  
+  private cameraHeightDistanceScale = 0.3 // Extra distance per unit of height
+  private cameraRestartZoom = 0 // Extra zoom out on restart (decays to 0)
+  private cameraRestartAngleOffset = 0 // Extra angle offset on restart (decays to 0)
+
   // Particle system
   private particleSystem: ParticleSystem
   private lastFootstepTime = 0
   private footstepInterval = 0.15 // Emit footstep particles every 150ms when moving
-  
+
   // Materials (for easy style switching)
   private groundMaterial: THREE.MeshStandardMaterial
   private playerMaterial: THREE.MeshToonMaterial
   private waterMaterial: WaterMaterial | null = null
+
+  // Ghost players (other online players)
+  private ghostPlayers: Map<number, {
+    mesh: THREE.Mesh
+    currentPos: THREE.Vector3
+    currentVel: THREE.Vector3
+    targetPos: THREE.Vector3
+    targetVel: THREE.Vector3
+  }> = new Map()
+  private ghostPlayerGeometry: THREE.SphereGeometry | null = null
+  private ghostSpringStiffness = 15
+  private ghostDampingRatio = 1.0
 
   constructor(container: HTMLElement) {
     // Initialize renderer
@@ -64,7 +86,7 @@ export class ThreeEngine {
 
     // Initialize scene
     this.scene = new THREE.Scene()
-    
+
     // Initialize camera
     this.camera = new THREE.PerspectiveCamera(
       50,
@@ -86,9 +108,8 @@ export class ThreeEngine {
     this.setupScene()
     this.setupLighting()
     this.loadPlayer()
-    this.generateObstacles(25, 25)
+    this.generateObstacles(150, 100)
     this.loadWell(8, 8)
-    
     // Initialize particle system
     this.particleSystem = new ParticleSystem(this.scene, 500)
 
@@ -123,7 +144,7 @@ export class ThreeEngine {
 
   private setupScene(): void {
     // Ground plane
-    const groundGeometry = new THREE.PlaneGeometry(100, 100)
+    const groundGeometry = new THREE.PlaneGeometry(400, 400)
     this.ground = new THREE.Mesh(groundGeometry, this.groundMaterial)
     this.ground.rotation.x = -Math.PI / 2
     this.ground.receiveShadow = true
@@ -164,6 +185,7 @@ export class ThreeEngine {
   }
 
   private bodyMaterial: THREE.MeshStandardMaterial | null = null
+  private capeMaterial: CapeMaterial | null = null
 
   private loadPlayer(): void {
     const loader = new GLTFLoader()
@@ -196,16 +218,28 @@ export class ThreeEngine {
     })
 
     // Load body with unique color from server (golden angle hue)
+    // Uses CapeMaterial for velocity-driven cape deformation effect
     loader.load('/models/player/charBody.glb', (gltf) => {
       const body = gltf.scene
       const colorHue = gameStore.get(playerColorHueAtom)
+
+      // Create CapeMaterial with velocity-based deformation
+      this.capeMaterial = new CapeMaterial({
+        color: this.hslToColor(colorHue, 70, 55),
+        lagWeight: 0.06, // Slower lag for more trailing
+        displacementStrength: 0.25, // More visible deformation
+        effectStartY: 0.5, // Start deformation from middle
+        effectEndY: -0.8, // Max effect at bottom
+      })
+
+      // Also keep a standard material reference for color updates
       this.bodyMaterial = new THREE.MeshStandardMaterial({
         color: this.hslToColor(colorHue, 70, 55)
       })
 
       body.traverse((child) => {
         if (child instanceof THREE.Mesh) {
-          child.material = this.bodyMaterial!
+          child.material = this.capeMaterial!
           child.castShadow = true
           child.receiveShadow = true
         }
@@ -215,8 +249,12 @@ export class ThreeEngine {
       // Subscribe to color changes (in case it updates after load)
       const unsubColor = gameStore.sub(playerColorHueAtom, () => {
         const hue = gameStore.get(playerColorHueAtom)
+        const newColor = this.hslToColor(hue, 70, 55)
+        if (this.capeMaterial) {
+          this.capeMaterial.setColor(newColor)
+        }
         if (this.bodyMaterial) {
-          this.bodyMaterial.color = this.hslToColor(hue, 70, 55)
+          this.bodyMaterial.color = newColor
         }
       })
       this.unsubscribers.push(unsubColor)
@@ -370,28 +408,118 @@ export class ThreeEngine {
       }
     })
     this.unsubscribers.push(unsubWaterScale)
+
+    // Subscribe to game state changes to sync player position on restart
+    const unsubGameState = gameStore.sub(gameStateAtom, () => {
+      const state = gameStore.get(gameStateAtom)
+      if (state === 'playing' && this.player) {
+        const pos = gameStore.get(playerPositionAtom)
+        this.player.position.set(pos.x, pos.y, pos.z)
+        this.playerVelocity.set(0, 0, 0)
+
+        // Trigger camera restart animation (zoom out + top-down, then smoothly return)
+        this.cameraRestartZoom = 20 // Extra distance that decays
+        this.cameraRestartAngleOffset = 30 // Push angle toward top-down (decays)
+      }
+    })
+    this.unsubscribers.push(unsubGameState)
+  }
+
+  private updateGhostPlayers(deltaTime: number): void {
+    const otherPlayers = gameStore.get(otherPlayersAtom)
+
+    // Create shared geometry if not exists
+    if (!this.ghostPlayerGeometry) {
+      this.ghostPlayerGeometry = new THREE.SphereGeometry(0.4, 12, 8)
+    }
+
+    // Track which players exist this frame
+    const currentPlayerIds = new Set(otherPlayers.keys())
+
+    // Remove ghost players that are no longer in the map
+    for (const [id, ghost] of this.ghostPlayers) {
+      if (!currentPlayerIds.has(id)) {
+        this.scene.remove(ghost.mesh)
+        ghost.mesh.material instanceof THREE.Material && ghost.mesh.material.dispose()
+        this.ghostPlayers.delete(id)
+      }
+    }
+
+    // Update or create ghost players
+    for (const [id, playerState] of otherPlayers) {
+      let ghost = this.ghostPlayers.get(id)
+
+      if (!ghost) {
+        // Create new ghost player
+        const material = new THREE.MeshStandardMaterial({
+          color: this.hslToColor(playerState.colorHue, 70, 55),
+          transparent: true,
+          opacity: 0.2,
+          emissive: this.hslToColor(playerState.colorHue, 70, 55),
+          emissiveIntensity: 0.3,
+        })
+
+        const mesh = new THREE.Mesh(this.ghostPlayerGeometry, material)
+        mesh.castShadow = false
+        mesh.receiveShadow = false
+        mesh.position.set(playerState.x, playerState.y, playerState.z)
+        this.scene.add(mesh)
+
+        ghost = {
+          mesh,
+          currentPos: new THREE.Vector3(playerState.x, playerState.y, playerState.z),
+          currentVel: new THREE.Vector3(0, 0, 0),
+          targetPos: new THREE.Vector3(playerState.x, playerState.y, playerState.z),
+          targetVel: new THREE.Vector3(playerState.vx, playerState.vy, playerState.vz),
+        }
+        this.ghostPlayers.set(id, ghost)
+      }
+
+      // Update target from server state
+      ghost.targetPos.set(playerState.x, playerState.y, playerState.z)
+      ghost.targetVel.set(playerState.vx, playerState.vy, playerState.vz)
+
+      // Spring-damper interpolation for smooth movement
+      const damping = 2 * this.ghostDampingRatio * Math.sqrt(this.ghostSpringStiffness)
+
+      // Calculate spring forces
+      const positionDiff = new THREE.Vector3().subVectors(ghost.targetPos, ghost.currentPos)
+      const velocityDiff = new THREE.Vector3().subVectors(ghost.targetVel, ghost.currentVel)
+
+      const springForce = positionDiff.multiplyScalar(this.ghostSpringStiffness)
+      const dampingForce = velocityDiff.multiplyScalar(damping)
+
+      const acceleration = springForce.add(dampingForce)
+
+      // Update velocity and position
+      ghost.currentVel.addScaledVector(acceleration, deltaTime)
+      ghost.currentPos.addScaledVector(ghost.currentVel, deltaTime)
+
+      // Apply to mesh
+      ghost.mesh.position.copy(ghost.currentPos)
+    }
   }
 
   private checkObstacleCollisions(): void {
     if (!this.player) return
-    
+
     const now = Date.now()
     const cooldown = gameStore.get(collisionCooldownAtom)
-    
+
     // Skip if still in cooldown
     if (now - this.lastCollisionTime < cooldown) return
-    
+
     const playerPos = this.player.position
-    
+
     for (let i = 0; i < this.obstacles.length; i++) {
       const obstacle = this.obstacles[i]
       const obstacleRadius = this.obstacleRadii[i]
-      
+
       // Calculate distance between player and obstacle (only XZ plane for simplicity)
       const dx = playerPos.x - obstacle.position.x
       const dz = playerPos.z - obstacle.position.z
       const distance = Math.sqrt(dx * dx + dz * dz)
-      
+
       // Check if collision occurred
       const collisionDistance = this.playerRadius + obstacleRadius
       if (distance < collisionDistance) {
@@ -399,21 +527,21 @@ export class ThreeEngine {
         this.lastCollisionTime = now
         const damage = gameStore.get(damageAmountAtom)
         takeDamage(damage)
-        
+
         // Emit damage particles at collision point
         this.particleSystem.emit(playerPos, 'damage')
-        
+
         // Push player away from obstacle
         if (distance > 0.01) {
           const pushStrength = (collisionDistance - distance) + 0.5
           this.player.position.x += (dx / distance) * pushStrength
           this.player.position.z += (dz / distance) * pushStrength
-          
+
           // Also apply velocity in the push direction
           this.playerVelocity.x = (dx / distance) * 3
           this.playerVelocity.z = (dz / distance) * 3
         }
-        
+
         break // Only handle one collision per frame
       }
     }
@@ -430,72 +558,118 @@ export class ThreeEngine {
 
   private animate = (): void => {
     this.animationId = requestAnimationFrame(this.animate)
-    
+
     const now = performance.now()
     const deltaTime = this.lastTime > 0 ? Math.min((now - this.lastTime) / 1000, 0.1) : 1 / 60
     this.lastTime = now
-    
+
     const gameState = gameStore.get(gameStateAtom)
-    
+
     // Update player movement when playing
     if (gameState === 'playing' && this.player) {
       const input = gameStore.get(inputDirectionAtom)
       const speed = gameStore.get(playerSpeedAtom)
       const gravity = gameStore.get(gravityAtom)
-      
+
       // Simple direct movement - WASD/arrows map directly to world directions
       this.player.position.x += input.x * speed * deltaTime
       this.player.position.z += input.z * speed * deltaTime
-      
+
+      // Check grounded state (before movement, for accurate detection)
+      const groundHalfSize = 200
+      const isOverGround =
+        Math.abs(this.player.position.x) < groundHalfSize &&
+        Math.abs(this.player.position.z) < groundHalfSize
+      const isGrounded = isOverGround && this.player.position.y <= this.groundLevel + 0.01
+      setGrounded(isGrounded)
+
+      // Handle jump request
+      const jumpRequested = gameStore.get(jumpRequestedAtom)
+      const jumpEnergy = gameStore.get(jumpEnergyAtom)
+
+      if (jumpRequested) {
+        clearJumpRequest()
+
+        // Can jump if we have meaningful energy (at least 5%)
+        if (jumpEnergy > 0.05) {
+          // Use 60% of available energy for this jump
+          const energyToUse = jumpEnergy * this.jumpEnergyPerJump
+          const remainingEnergy = Math.max(0, jumpEnergy - energyToUse)
+
+          // Jump strength scales with energy used (so diminishing returns)
+          const jumpStrength = this.jumpImpulse * Math.sqrt(energyToUse)
+
+          // ADD to velocity (only upward momentum, never negative)
+          this.playerVelocity.y = Math.max(this.playerVelocity.y, 0) + jumpStrength
+
+          // Deplete energy (never below 0)
+          setJumpEnergy(remainingEnergy)
+
+          // Emit jump particles
+          this.particleSystem.emit(
+            { x: this.player.position.x, y: this.groundLevel, z: this.player.position.z },
+            'footstep'
+          )
+        }
+      }
+
+      // Continuous energy recharge (faster when grounded)
+      const currentEnergy = gameStore.get(jumpEnergyAtom)
+      if (currentEnergy < 1.0) {
+        const rechargeRate = isGrounded ? this.energyRechargeRateGrounded : this.energyRechargeRateAir
+        const newEnergy = Math.min(1.0, currentEnergy + rechargeRate * deltaTime)
+        setJumpEnergy(newEnergy)
+      }
+
       // Emit footstep particles when moving
       const isMoving = Math.abs(input.x) > 0.1 || Math.abs(input.z) > 0.1
       const nowSeconds = now / 1000
-      if (isMoving && nowSeconds - this.lastFootstepTime > this.footstepInterval) {
+      if (isMoving && isGrounded && nowSeconds - this.lastFootstepTime > this.footstepInterval) {
         this.lastFootstepTime = nowSeconds
         this.particleSystem.emit(
           { x: this.player.position.x, y: 0.1, z: this.player.position.z },
           'footstep'
         )
       }
-      
+
       // Apply gravity
       this.playerVelocity.y -= gravity * deltaTime
       this.player.position.y += this.playerVelocity.y * deltaTime
-      
-      // Check if player is over the ground (ground is 100x100 centered at origin)
-      const groundHalfSize = 50
-      const isOverGround = 
-        Math.abs(this.player.position.x) < groundHalfSize && 
-        Math.abs(this.player.position.z) < groundHalfSize
-      
+
       // Ground collision - only if over ground
       if (isOverGround && this.player.position.y < this.groundLevel) {
         this.player.position.y = this.groundLevel
         this.playerVelocity.y = 0
       }
-      
-      // Player fell too far - game over
+
+      // If player falls off the map, respawn them at origin
       if (this.player.position.y < -20) {
-        endGame()
+        this.player.position.set(0, this.groundLevel, 0)
+        this.playerVelocity.set(0, 0, 0)
       }
-      
+
       // Check obstacle collisions
       this.checkObstacleCollisions()
-      
+
       // Update player position in store
       setPlayerPosition({
         x: this.player.position.x,
         y: this.player.position.y,
         z: this.player.position.z
       })
-      
-      // Check for game over
-      const health = gameStore.get(playerHealthAtom)
-      if (health <= 0) {
-        endGame()
+
+      // Update cape material with velocity for trailing effect
+      if (this.capeMaterial) {
+        // Combine XZ movement velocity with actual Y velocity
+        const movementVelocity = {
+          x: input.x * speed,
+          y: this.playerVelocity.y,
+          z: input.z * speed
+        }
+        this.capeMaterial.update(movementVelocity, deltaTime)
       }
     }
-    
+
     // Update camera to follow player
     if (this.player) {
       const targetDistance = gameStore.get(cameraDistanceAtom)
@@ -503,9 +677,21 @@ export class ThreeEngine {
       const targetViewAngle = gameStore.get(cameraViewAngleAtom)
       const transitionSpeed = gameStore.get(cameraTransitionSpeedAtom)
 
+      // Decay restart animation offsets
+      this.cameraRestartZoom *= 0.97
+      this.cameraRestartAngleOffset *= 0.97
+
+      // Add height-based distance (further away when higher up)
+      const heightAboveGround = Math.max(0, this.player.position.y - this.groundLevel)
+      const heightDistanceOffset = heightAboveGround * this.cameraHeightDistanceScale
+
+      // Calculate effective targets with restart animation and height offset
+      const effectiveTargetDistance = targetDistance + heightDistanceOffset + this.cameraRestartZoom
+      const effectiveTargetAngle = targetViewAngle - this.cameraRestartAngleOffset
+
       // Smooth camera parameters toward target values (prevents jitter when adjusting sliders)
-      this.currentCameraDistance += (targetDistance - this.currentCameraDistance) * transitionSpeed
-      this.currentCameraViewAngle += (targetViewAngle - this.currentCameraViewAngle) * transitionSpeed
+      this.currentCameraDistance += (effectiveTargetDistance - this.currentCameraDistance) * transitionSpeed
+      this.currentCameraViewAngle += (effectiveTargetAngle - this.currentCameraViewAngle) * transitionSpeed
 
       // Convert angle to radians
       const angleRad = (this.currentCameraViewAngle * Math.PI) / 180
@@ -529,7 +715,10 @@ export class ThreeEngine {
       // Fixed rotation based on current view angle (smoothed, no jitter)
       this.camera.rotation.set(-Math.PI / 2 + angleRad, 0, 0)
     }
-    
+
+    // Update ghost players (other online players)
+    this.updateGhostPlayers(deltaTime)
+
     // Update particle system
     this.particleSystem.update(deltaTime)
 
@@ -537,7 +726,7 @@ export class ThreeEngine {
     if (this.waterMaterial) {
       this.waterMaterial.update(deltaTime)
     }
-    
+
     // Render
     this.renderer.render(this.scene, this.camera)
   }
@@ -557,14 +746,24 @@ export class ThreeEngine {
 
   destroy(): void {
     this.stop()
-    
+
     // Unsubscribe from store
     this.unsubscribers.forEach(unsub => unsub())
     this.unsubscribers = []
-    
+
     // Remove resize listener
     window.removeEventListener('resize', this.handleResize)
-    
+
+    // Dispose ghost players
+    for (const [, ghost] of this.ghostPlayers) {
+      this.scene.remove(ghost.mesh)
+      if (ghost.mesh.material instanceof THREE.Material) {
+        ghost.mesh.material.dispose()
+      }
+    }
+    this.ghostPlayers.clear()
+    this.ghostPlayerGeometry?.dispose()
+
     // Dispose of Three.js resources
     this.obstacles.forEach(obj => {
       obj.traverse((child) => {
@@ -576,18 +775,19 @@ export class ThreeEngine {
         }
       })
     })
-    
+
     if (this.ground) {
       this.ground.geometry.dispose()
       this.groundMaterial.dispose()
     }
-    
+
     // Dispose particle system
     this.particleSystem.dispose()
-    
+
     this.playerMaterial.dispose()
+    this.capeMaterial?.dispose()
     this.renderer.dispose()
-    
+
     // Remove canvas from DOM
     this.renderer.domElement.remove()
   }

@@ -3,6 +3,7 @@ import { Provider } from 'jotai'
 import { gameStore } from './store'
 import { GameCanvas } from './components/GameCanvas'
 import { UIOverlay } from './ui/UIOverlay'
+import { TouchJumpOverlay } from './ui/TouchJumpOverlay'
 import { gameLoop } from './game/GameLoop'
 import { keyboardInput } from './input/KeyboardInput'
 import { isMobile } from './utils/device'
@@ -52,6 +53,7 @@ export function App() {
     <Provider store={gameStore}>
       <div className="game-container">
         <GameCanvas />
+        <TouchJumpOverlay />
         <UIOverlay />
       </div>
     </Provider>

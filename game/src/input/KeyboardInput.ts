@@ -1,4 +1,5 @@
 import { setInputDirection, setInputSource } from '../actions/inputActions'
+import { requestJump } from '../actions/playerActions'
 
 class KeyboardInput {
   private keys: Set<string> = new Set()
@@ -18,6 +19,12 @@ class KeyboardInput {
       this.keys.add(e.key.toLowerCase())
       setInputSource('keyboard')
       this.updateDirection()
+    }
+
+    // Space for jump
+    if (e.key === ' ' || e.key === 'Space') {
+      e.preventDefault()
+      requestJump()
     }
   }
 

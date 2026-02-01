@@ -1,5 +1,13 @@
+<<<<<<< HEAD
+node_modules/
+dist/
+.vite/
+*.local
+.DS_Store
+=======
 node_modules
 .vite
 **/*.local.json
 **/*.local.json
 .claude/settings.local.json
+>>>>>>> 520ab953d408e78dc05470338d4f82de4b04e555
