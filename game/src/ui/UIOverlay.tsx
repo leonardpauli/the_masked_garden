@@ -8,6 +8,7 @@ import { GyroPermission } from './GyroPermission'
 import { DevPanel } from './DevPanel'
 import { PlayerCount } from './PlayerCount'
 import { Minimap } from './Minimap'
+import { MuteButton } from './MuteButton'
 
 export function UIOverlay() {
   const gameState = useAtomValue(gameStateAtom)
@@ -15,6 +16,7 @@ export function UIOverlay() {
 
   return (
     <div className="ui-overlay">
+      <MuteButton />
       {gameState === 'menu' && <StartScreen />}
 
       {gameState === 'playing' && (

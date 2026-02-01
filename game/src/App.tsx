@@ -6,6 +6,9 @@ import { UIOverlay } from './ui/UIOverlay'
 import { TouchJumpOverlay } from './ui/TouchJumpOverlay'
 import { gameLoop } from './game/GameLoop'
 import { keyboardInput } from './input/KeyboardInput'
+import { soundEngine } from './audio'
+import { footstepsAudio } from './audio/footsteps'
+import { musicManager } from './audio/musicManager'
 import { isMobile } from './utils/device'
 import { connectWebSocket } from './online/wsClient'
 import { SoundDebug } from './ui/SoundDebug'
@@ -42,6 +45,56 @@ export function App() {
     return () => {
       gameLoop.destroy()
       keyboardInput.destroy()
+    }
+  }, [route])
+
+  // Initialize audio immediately on load, resume on interaction if browser blocks autoplay
+  useEffect(() => {
+    if (route !== 'game') return
+
+    let initialized = false
+
+    const initAudio = async () => {
+      if (initialized) return
+      initialized = true
+      await soundEngine.initialize()
+      await musicManager.initialize()
+      await footstepsAudio.initialize()
+    }
+
+    const resumeAudio = async () => {
+      await soundEngine.resume()
+    }
+
+    const removeListeners = () => {
+      window.removeEventListener('mousedown', handleInteraction)
+      window.removeEventListener('touchstart', handleInteraction)
+      window.removeEventListener('keydown', handleInteraction)
+      window.removeEventListener('pointerdown', handleInteraction)
+    }
+
+    const handleInteraction = () => {
+      if (!initialized) {
+        initAudio()
+      } else {
+        resumeAudio()
+      }
+      removeListeners()
+    }
+
+    // Try to start audio immediately on page load
+    initAudio()
+
+    // If browser blocks autoplay, resume on first interaction
+    window.addEventListener('mousedown', handleInteraction)
+    window.addEventListener('touchstart', handleInteraction)
+    window.addEventListener('keydown', handleInteraction)
+    window.addEventListener('pointerdown', handleInteraction)
+
+    return () => {
+      removeListeners()
+      musicManager.destroy()
+      footstepsAudio.destroy()
     }
   }, [route])
 

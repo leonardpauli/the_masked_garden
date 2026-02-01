@@ -518,3 +518,36 @@
   background: rgba(255, 255, 255, 0.2);
   color: white;
 }
+
+/* Mute Button */
+.mute-button {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  width: 44px;
+  height: 44px;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  transition: background 0.2s, transform 0.1s;
+  z-index: 100;
+}
+
+.mute-button:hover {
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.mute-button:active {
+  transform: scale(0.95);
+}
+
+.mute-button svg {
+  width: 20px;
+  height: 20px;
+}
