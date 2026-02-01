@@ -10,6 +10,12 @@ export type VisualStyle =
   | 'fire'
   | 'ocean'
   | 'sketch'
+  | 'dreamscape'
+
+export type VisualEffectType =
+  | 'none'
+  | 'edgeDetection'
+  | 'dreamscape'
 
 export interface VisualStyleConfig {
   name: string
@@ -27,7 +33,9 @@ export interface VisualStyleConfig {
   saturation: number
   contrast: number
   brightness: number
-  edgeDetection?: boolean
+  // Post-processing effect
+  effectType?: VisualEffectType
+  // Edge detection settings
   edgeColor?: string
   edgeThreshold?: number
 }
@@ -219,9 +227,27 @@ export const visualStyleConfigs: Record<VisualStyle, VisualStyleConfig> = {
     saturation: 0.1,
     contrast: 0.8,
     brightness: 1.1,
-    edgeDetection: true,
+    effectType: 'edgeDetection',
     edgeColor: '#1a1a1a',
     edgeThreshold: 0.08,
+  },
+  dreamscape: {
+    name: 'Dreamscape',
+    backgroundColor: '#1a1a2e',
+    fogColor: '#2a2040',
+    fogNear: 15,
+    fogFar: 50,
+    groundColor: '#3a3a5a',
+    ambientIntensity: 0.5,
+    ambientColor: '#9988ff',
+    directionalIntensity: 0.7,
+    directionalColor: '#ffaadd',
+    obstacleColors: ['#8866cc', '#66aacc', '#aa66aa', '#6688bb', '#9977bb', '#7799aa'],
+    playerColor: '#aaccff',
+    saturation: 1.2,
+    contrast: 0.9,
+    brightness: 1.0,
+    effectType: 'dreamscape',
   },
 }
 
@@ -237,4 +263,5 @@ export const visualStyleOptions: VisualStyle[] = [
   'fire',
   'ocean',
   'sketch',
+  'dreamscape',
 ]
