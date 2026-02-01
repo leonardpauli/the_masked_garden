@@ -3,6 +3,7 @@ import { useAtomValue } from 'jotai'
 import { gameStateAtom } from '../store/atoms/gameAtoms'
 import { requestJump } from '../actions/playerActions'
 import { nextMask, prevMask } from '../masksys/maskActions'
+import { soundEngine } from '../audio/sound-engine'
 
 const MIDDLE_ZONE_RATIO = 0.4 // Middle 40% of screen width triggers jump
 const SWIPE_THRESHOLD = 50 // Minimum pixels for a swipe
@@ -12,6 +13,9 @@ export function TouchJumpOverlay() {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
 
   const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    // Resume audio context on touch (iOS requires user interaction)
+    soundEngine.resume()
+
     // Only handle if this overlay is the direct target (not bubbled from children)
     if (e.target !== e.currentTarget) return
 
