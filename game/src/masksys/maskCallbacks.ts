@@ -9,11 +9,16 @@
  */
 
 import type { MaskState, MaskStateCallbacks } from './types'
+import { visualStyleAtom } from '../store/atoms/configAtoms'
+import { getDefaultStore } from 'jotai'
 
 // ============== NoMask Callbacks ==============
+const store = getDefaultStore()
 export const noMaskCallbacks: MaskStateCallbacks = {
   onEnter: (from: MaskState) => {
     console.log(`[NoMask] Entering no mask state, from: ${from}`)
+    // 切换到 default 风格
+    store.set(visualStyleAtom, 'default')
     // TODO: Restore default shader
     // TODO: Restore default environment
   },
@@ -29,6 +34,8 @@ export const noMaskCallbacks: MaskStateCallbacks = {
 export const springMaskCallbacks: MaskStateCallbacks = {
   onEnter: (from: MaskState) => {
     console.log(`[SpringMask] Entering spring mask state, from: ${from}`)
+    // 切换到 nature 风格
+    store.set(visualStyleAtom, 'nature')
     // TODO: Switch to spring shader
     // TODO: Tree growth animation
     // TODO: Add petal particle effects
@@ -48,6 +55,8 @@ export const springMaskCallbacks: MaskStateCallbacks = {
 export const autumnMaskCallbacks: MaskStateCallbacks = {
   onEnter: (from: MaskState) => {
     console.log(`[AutumnMask] Entering autumn mask state, from: ${from}`)
+    // 切换到 retro 风格
+    store.set(visualStyleAtom, 'retro')
     // TODO: Switch to autumn shader (warm tones)
     // TODO: Start falling leaves effect
     // TODO: Leaves color change
@@ -66,6 +75,8 @@ export const autumnMaskCallbacks: MaskStateCallbacks = {
 export const stormMaskCallbacks: MaskStateCallbacks = {
   onEnter: (from: MaskState) => {
     console.log(`[StormMask] Entering storm mask state, from: ${from}`)
+    // 切换到 cyberpunk 风格
+    store.set(visualStyleAtom, 'cyberpunk')
     // TODO: Switch to storm shader (dark tones, lightning effects)
     // TODO: Add wind force affecting player movement
     // TODO: Start rain/lightning particle effects
@@ -88,6 +99,8 @@ export const stormMaskCallbacks: MaskStateCallbacks = {
 export const finalMaskCallbacks: MaskStateCallbacks = {
   onEnter: (from: MaskState) => {
     console.log(`[FinalMask] Entering final mask state, from: ${from}`)
+    // 切换到 neon 风格
+    store.set(visualStyleAtom, 'neon')
     // TODO: Switch to final shader (special visual effects)
     // TODO: Start ultimate effects
     // TODO: Possible gameplay mechanic changes

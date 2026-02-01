@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAtom } from 'jotai'
+// ...existing code...
 import { useMemo } from 'react'
 import {
   playerSpeedAtom,
@@ -24,6 +25,17 @@ import {
   type CameraPreset,
 } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, visualStyleOptions, type VisualStyle } from '../types/visualStyles'
+import { maskStateAtom, maskStateMachineAtom } from '../store/atoms/maskAtoms'
+import { MASK_STATES } from '../masksys/types'
+import type { MaskState } from '../masksys/types'
+// MaskState 与视觉风格的映射
+const maskStateToVisualStyle: Record<MaskState, VisualStyle> = {
+  NoMask: 'default',
+  SpringMask: 'nature',
+  AutumnMask: 'retro',
+  StormMask: 'cyberpunk',
+  FinalMask: 'neon',
+}
 
 const DEFAULT_PRESETS: CameraPreset[] = [
   { name: 'Default', distance: 14, viewAngle: 43 },
@@ -94,6 +106,9 @@ function hslToHex(h: number, s: number, l: number): string {
 }
 
 export function DevPanel() {
+  // MaskState 相关
+  const [maskState, setMaskState] = useAtom(maskStateAtom)
+  const [maskStateMachine] = useAtom(maskStateMachineAtom)
   const [isOpen, setIsOpen] = useAtom(devPanelOpenAtom)
   const [playerSpeed, setPlayerSpeed] = useAtom(playerSpeedAtom)
   const [playerScale, setPlayerScale] = useAtom(playerScaleAtom)
@@ -158,6 +173,26 @@ export function DevPanel() {
 
       {isOpen && (
         <div className="dev-panel-content">
+          <h3>Mask State</h3>
+          <div className="dev-dropdown">
+            <select
+              value={maskState}
+              onChange={e => {
+                const nextState = e.target.value as MaskState
+                setMaskState(nextState)
+                if (maskStateMachine) {
+                  maskStateMachine.transition(nextState)
+                }
+                // 切换视觉风格
+                setVisualStyle(maskStateToVisualStyle[nextState])
+              }}
+              className="dev-select"
+            >
+              {MASK_STATES.map(state => (
+                <option key={state} value={state}>{state}</option>
+              ))}
+            </select>
+          </div>
           <button
             className="dev-button"
             onClick={() => { window.location.hash = '#sound' }}
