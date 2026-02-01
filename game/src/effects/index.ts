@@ -11,6 +11,13 @@ export { PixelateEffect } from './PixelateEffect'
 export { NegativeEffect } from './NegativeEffect'
 export { AstralEffect } from './AstralEffect'
 export { TiltShiftEffect } from './TiltShiftEffect'
+export { VhsEffect } from './VhsEffect'
+export { AsciiEffect } from './AsciiEffect'
+export { HalftoneEffect } from './HalftoneEffect'
+export { InfraredEffect } from './InfraredEffect'
+export { EchoEffect } from './EchoEffect'
 
-// Registry
+// Registry and params
 export { effectRegistry, createEffect } from './effectRegistry'
+export { effectParams, getEffectParams, getEffectDefaults } from './effectParams'
+export type { EffectParam } from './effectParams'

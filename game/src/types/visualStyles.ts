@@ -20,6 +20,11 @@ export type VisualStyle =
   | 'negative'
   | 'astral'
   | 'tiltShift'
+  | 'vhs'
+  | 'ascii'
+  | 'halftone'
+  | 'infrared'
+  | 'echo'
 
 export type VisualEffectType =
   | 'none'
@@ -34,6 +39,11 @@ export type VisualEffectType =
   | 'negative'
   | 'astral'
   | 'tiltShift'
+  | 'vhs'
+  | 'ascii'
+  | 'halftone'
+  | 'infrared'
+  | 'echo'
 
 export interface VisualStyleConfig {
   name: string
@@ -429,6 +439,96 @@ export const visualStyleConfigs: Record<VisualStyle, VisualStyleConfig> = {
     brightness: 1.15,
     effectType: 'tiltShift',
   },
+  vhs: {
+    name: 'VHS',
+    backgroundColor: '#0a0a0a',
+    fogColor: '#1a1a1a',
+    fogNear: 15,
+    fogFar: 45,
+    groundColor: '#2a2a2a',
+    ambientIntensity: 0.5,
+    ambientColor: '#ffffff',
+    directionalIntensity: 0.7,
+    directionalColor: '#ffffff',
+    obstacleColors: ['#cc4444', '#44cc44', '#4444cc', '#cccc44', '#cc44cc', '#44cccc'],
+    playerColor: '#ffffff',
+    saturation: 0.9,
+    contrast: 1.2,
+    brightness: 0.95,
+    effectType: 'vhs',
+  },
+  ascii: {
+    name: 'ASCII',
+    backgroundColor: '#000000',
+    fogColor: '#000000',
+    fogNear: 30,
+    fogFar: 80,
+    groundColor: '#001100',
+    ambientIntensity: 0.8,
+    ambientColor: '#00ff00',
+    directionalIntensity: 0.6,
+    directionalColor: '#00ff00',
+    obstacleColors: ['#00aa00', '#00cc00', '#008800', '#00bb00', '#009900', '#00dd00'],
+    playerColor: '#00ff00',
+    saturation: 0.5,
+    contrast: 1.5,
+    brightness: 1.1,
+    effectType: 'ascii',
+  },
+  halftone: {
+    name: 'Halftone',
+    backgroundColor: '#ffffff',
+    fogColor: '#f0f0f0',
+    fogNear: 25,
+    fogFar: 60,
+    groundColor: '#e0e0e0',
+    ambientIntensity: 0.7,
+    ambientColor: '#ffffff',
+    directionalIntensity: 0.8,
+    directionalColor: '#ffffff',
+    obstacleColors: ['#ff0000', '#0000ff', '#ffff00', '#00ffff', '#ff00ff', '#000000'],
+    playerColor: '#000000',
+    saturation: 1.5,
+    contrast: 1.3,
+    brightness: 1.1,
+    effectType: 'halftone',
+  },
+  infrared: {
+    name: 'Infrared',
+    backgroundColor: '#1a0a0a',
+    fogColor: '#2a1515',
+    fogNear: 15,
+    fogFar: 50,
+    groundColor: '#ff8866',
+    ambientIntensity: 0.5,
+    ambientColor: '#ffaa88',
+    directionalIntensity: 0.8,
+    directionalColor: '#ff6644',
+    obstacleColors: ['#ff4488', '#ff88aa', '#ff6688', '#ffaacc', '#ff8888', '#ffccaa'],
+    playerColor: '#ffffff',
+    saturation: 1.2,
+    contrast: 1.1,
+    brightness: 1.0,
+    effectType: 'infrared',
+  },
+  echo: {
+    name: 'Echo',
+    backgroundColor: '#0a0a1a',
+    fogColor: '#151530',
+    fogNear: 15,
+    fogFar: 50,
+    groundColor: '#1a1a3a',
+    ambientIntensity: 0.4,
+    ambientColor: '#8888ff',
+    directionalIntensity: 0.6,
+    directionalColor: '#aaaaff',
+    obstacleColors: ['#6666aa', '#7777bb', '#5555aa', '#8888cc', '#6677aa', '#7788bb'],
+    playerColor: '#aabbff',
+    saturation: 1.1,
+    contrast: 1.0,
+    brightness: 1.0,
+    effectType: 'echo',
+  },
 }
 
 export const visualStyleOptions: VisualStyle[] = [
@@ -453,4 +553,9 @@ export const visualStyleOptions: VisualStyle[] = [
   'negative',
   'astral',
   'tiltShift',
+  'vhs',
+  'ascii',
+  'halftone',
+  'infrared',
+  'echo',
 ]

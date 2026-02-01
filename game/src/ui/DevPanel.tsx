@@ -20,9 +20,11 @@ import {
   treeColorVariationAtom,
   groundVibranceAtom,
   waterShaderScaleAtom,
+  effectParamsAtom,
   type CameraPreset,
 } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, visualStyleOptions, type VisualStyle } from '../types/visualStyles'
+import { getEffectParams, getEffectDefaults } from '../effects/effectParams'
 import { maskStateAtom } from '../store/atoms/maskAtoms'
 import { MASK_STATES } from '../masksys/types'
 import type { MaskState } from '../masksys/types'
@@ -117,7 +119,29 @@ export function DevPanel() {
   const [treeColorVariation, setTreeColorVariation] = useAtom(treeColorVariationAtom)
   const [groundVibrance, setGroundVibrance] = useAtom(groundVibranceAtom)
   const [waterShaderScale, setWaterShaderScale] = useAtom(waterShaderScaleAtom)
+  const [effectParams, setEffectParams] = useAtom(effectParamsAtom)
   const [newPresetName, setNewPresetName] = useState('')
+
+  // Get current effect type and its parameters
+  const currentEffectType = visualStyleConfigs[visualStyle].effectType ?? 'none'
+  const currentEffectParams = useMemo(() => getEffectParams(currentEffectType), [currentEffectType])
+
+  // Initialize effect params when style changes
+  useMemo(() => {
+    if (currentEffectType !== 'none') {
+      const defaults = getEffectDefaults(currentEffectType)
+      // Only set defaults for params that don't exist
+      const newParams = { ...defaults }
+      for (const key of Object.keys(effectParams)) {
+        if (key in defaults) {
+          newParams[key] = effectParams[key]
+        }
+      }
+      if (JSON.stringify(newParams) !== JSON.stringify(effectParams)) {
+        setEffectParams(newParams)
+      }
+    }
+  }, [currentEffectType])
 
   // Compute ground color hex from vibrance
   const groundColorHex = useMemo(() => {
@@ -196,6 +220,23 @@ export function DevPanel() {
               ))}
             </select>
           </div>
+
+          {currentEffectParams.length > 0 && (
+            <>
+              <h4 style={{ marginTop: 8, marginBottom: 4, fontSize: 11, opacity: 0.7 }}>Effect Parameters</h4>
+              {currentEffectParams.map((param) => (
+                <Slider
+                  key={param.key}
+                  label={param.label}
+                  value={effectParams[param.key] ?? param.default}
+                  onChange={(value) => setEffectParams({ ...effectParams, [param.key]: value })}
+                  min={param.min}
+                  max={param.max}
+                  step={param.step}
+                />
+              ))}
+            </>
+          )}
 
           <h3>Player</h3>
           <Slider

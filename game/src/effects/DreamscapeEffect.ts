@@ -70,4 +70,25 @@ export class DreamscapeEffect extends Effect {
     const time = this.uniforms.get('time')!
     time.value += deltaTime
   }
+
+  get chromaticStrength(): number {
+    return this.uniforms.get('chromaticStrength')!.value as number
+  }
+  set chromaticStrength(value: number) {
+    this.uniforms.get('chromaticStrength')!.value = value
+  }
+
+  get waveStrength(): number {
+    return this.uniforms.get('waveStrength')!.value as number
+  }
+  set waveStrength(value: number) {
+    this.uniforms.get('waveStrength')!.value = value
+  }
+
+  get hueShiftSpeed(): number {
+    return this.uniforms.get('hueShiftSpeed')!.value as number
+  }
+  set hueShiftSpeed(value: number) {
+    this.uniforms.get('hueShiftSpeed')!.value = value
+  }
 }

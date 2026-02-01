@@ -3,6 +3,7 @@ import { Uniform } from 'three'
 
 const fragmentShader = /* glsl */ `
 uniform float time;
+uniform float intensity;
 
 // Convert to grayscale luminance
 float getLuminance(vec3 color) {
@@ -51,8 +52,8 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   vec3 distortedColor = texture2D(inputBuffer, distortedUv).rgb;
   float distortedLum = getLuminance(distortedColor);
 
-  // Combine luminance with noise
-  float heat = clamp(distortedLum + noise, 0.0, 1.0);
+  // Combine luminance with noise and intensity
+  float heat = clamp((distortedLum + noise) * intensity, 0.0, 1.0);
 
   // Apply thermal palette
   vec3 thermal = thermalPalette(heat);
@@ -71,6 +72,7 @@ export class ThermalEffect extends Effect {
       blendFunction: BlendFunction.NORMAL,
       uniforms: new Map<string, Uniform>([
         ['time', new Uniform(0)],
+        ['intensity', new Uniform(1.0)],
       ]),
     })
   }
@@ -78,5 +80,12 @@ export class ThermalEffect extends Effect {
   update(_renderer: unknown, _inputBuffer: unknown, deltaTime: number): void {
     const time = this.uniforms.get('time')!
     time.value += deltaTime
+  }
+
+  get intensity(): number {
+    return this.uniforms.get('intensity')!.value as number
+  }
+  set intensity(value: number) {
+    this.uniforms.get('intensity')!.value = value
   }
 }

@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { Effect, EffectComposer, EffectPass, RenderPass } from 'postprocessing'
 import { gameStore } from '../store'
-import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, cameraTransitionSpeedAtom, gravityAtom, treeColorVariationAtom, groundVibranceAtom, waterShaderScaleAtom, showHitboxesAtom } from '../store/atoms/configAtoms'
+import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, cameraTransitionSpeedAtom, gravityAtom, treeColorVariationAtom, groundVibranceAtom, waterShaderScaleAtom, showHitboxesAtom, effectParamsAtom } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, type VisualStyleConfig } from '../types/visualStyles'
 import { inputDirectionAtom } from '../store/atoms/inputAtoms'
 import { gameStateAtom } from '../store/atoms/gameAtoms'
@@ -639,6 +639,25 @@ export class ThreeEngine {
       this.updateHitboxVisualization()
     })
     this.unsubscribers.push(unsubHitboxes)
+
+    // Subscribe to effect parameter changes
+    const unsubEffectParams = gameStore.sub(effectParamsAtom, () => {
+      this.applyEffectParams()
+    })
+    this.unsubscribers.push(unsubEffectParams)
+  }
+
+  private applyEffectParams(): void {
+    if (!this.currentEffect) return
+
+    const params = gameStore.get(effectParamsAtom)
+    const effect = this.currentEffect as unknown as Record<string, unknown>
+
+    for (const [key, value] of Object.entries(params)) {
+      if (key in effect && typeof value === 'number') {
+        effect[key] = value
+      }
+    }
   }
 
   private updateGhostPlayers(deltaTime: number): void {

@@ -136,9 +136,9 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   // Add caustics to the scene
   vec3 finalColor = absorptionColor + causticColor * 0.4;
 
-  // Add floating particles
+  // Add floating particles (blue-tinted sediment)
   float particleLight = particles(uv, time);
-  finalColor += vec3(0.8, 0.9, 1.0) * particleLight;
+  finalColor += vec3(0.3, 0.5, 0.7) * particleLight;
 
   // Add subtle vignette for underwater darkness at edges
   float vignette = 1.0 - edgeFactor * 0.3;

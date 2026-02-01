@@ -13,6 +13,11 @@ import { PixelateEffect } from './PixelateEffect'
 import { NegativeEffect } from './NegativeEffect'
 import { AstralEffect } from './AstralEffect'
 import { TiltShiftEffect } from './TiltShiftEffect'
+import { VhsEffect } from './VhsEffect'
+import { AsciiEffect } from './AsciiEffect'
+import { HalftoneEffect } from './HalftoneEffect'
+import { InfraredEffect } from './InfraredEffect'
+import { EchoEffect } from './EchoEffect'
 
 // Effect factory type
 type EffectFactory = (config?: Record<string, unknown>) => Effect
@@ -33,6 +38,11 @@ export const effectRegistry: Record<Exclude<VisualEffectType, 'none'>, EffectFac
   negative: () => new NegativeEffect(),
   astral: () => new AstralEffect(),
   tiltShift: () => new TiltShiftEffect(),
+  vhs: () => new VhsEffect(),
+  ascii: () => new AsciiEffect(),
+  halftone: () => new HalftoneEffect(),
+  infrared: () => new InfraredEffect(),
+  echo: () => new EchoEffect(),
 }
 
 // Helper to create an effect from type

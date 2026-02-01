@@ -71,6 +71,9 @@ export const showHitboxesAtom = atom<boolean>(false)
 // Visual style config
 export const visualStyleAtom = atom<VisualStyle>('default')
 
+// Effect parameters (dynamic based on current effect)
+export const effectParamsAtom = atom<Record<string, number>>({})
+
 // Tree colors
 export const treeColorVariationAtom = atom<number>(getDefault('treeColorVariation', 1)) // 0-1 range
 
