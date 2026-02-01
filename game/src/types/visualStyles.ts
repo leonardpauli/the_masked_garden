@@ -11,11 +11,29 @@ export type VisualStyle =
   | 'ocean'
   | 'sketch'
   | 'dreamscape'
+  | 'thermal'
+  | 'glitch'
+  | 'underwater'
+  | 'xray'
+  | 'oilPainting'
+  | 'pixelate'
+  | 'negative'
+  | 'astral'
+  | 'tiltShift'
 
 export type VisualEffectType =
   | 'none'
   | 'edgeDetection'
   | 'dreamscape'
+  | 'thermal'
+  | 'glitch'
+  | 'underwater'
+  | 'xray'
+  | 'oilPainting'
+  | 'pixelate'
+  | 'negative'
+  | 'astral'
+  | 'tiltShift'
 
 export interface VisualStyleConfig {
   name: string
@@ -249,6 +267,168 @@ export const visualStyleConfigs: Record<VisualStyle, VisualStyleConfig> = {
     brightness: 1.0,
     effectType: 'dreamscape',
   },
+  thermal: {
+    name: 'Thermal Vision',
+    backgroundColor: '#0a0a15',
+    fogColor: '#0a0a15',
+    fogNear: 20,
+    fogFar: 60,
+    groundColor: '#1a1a2a',
+    ambientIntensity: 0.6,
+    ambientColor: '#ffffff',
+    directionalIntensity: 0.8,
+    directionalColor: '#ffffff',
+    obstacleColors: ['#444466', '#555577', '#333355', '#445566', '#334455', '#556677'],
+    playerColor: '#ffffff',
+    saturation: 1.0,
+    contrast: 1.1,
+    brightness: 1.0,
+    effectType: 'thermal',
+  },
+  glitch: {
+    name: 'Glitch',
+    backgroundColor: '#0a0a0a',
+    fogColor: '#0a0a0a',
+    fogNear: 15,
+    fogFar: 45,
+    groundColor: '#1a1a1a',
+    ambientIntensity: 0.4,
+    ambientColor: '#ffffff',
+    directionalIntensity: 0.9,
+    directionalColor: '#ffffff',
+    obstacleColors: ['#ff0040', '#00ff40', '#0040ff', '#ff00ff', '#00ffff', '#ffff00'],
+    playerColor: '#ffffff',
+    saturation: 1.3,
+    contrast: 1.2,
+    brightness: 1.0,
+    effectType: 'glitch',
+  },
+  underwater: {
+    name: 'Underwater',
+    backgroundColor: '#001a33',
+    fogColor: '#003355',
+    fogNear: 8,
+    fogFar: 35,
+    groundColor: '#002244',
+    ambientIntensity: 0.4,
+    ambientColor: '#4488aa',
+    directionalIntensity: 0.6,
+    directionalColor: '#88ccff',
+    obstacleColors: ['#225566', '#336677', '#447788', '#224455', '#335566', '#446677'],
+    playerColor: '#88aacc',
+    saturation: 0.8,
+    contrast: 0.9,
+    brightness: 0.9,
+    effectType: 'underwater',
+  },
+  xray: {
+    name: 'X-Ray',
+    backgroundColor: '#000508',
+    fogColor: '#001020',
+    fogNear: 20,
+    fogFar: 70,
+    groundColor: '#001015',
+    ambientIntensity: 0.3,
+    ambientColor: '#00ffff',
+    directionalIntensity: 0.5,
+    directionalColor: '#00aaff',
+    obstacleColors: ['#003344', '#004455', '#002233', '#005566', '#003355', '#004466'],
+    playerColor: '#00ddff',
+    saturation: 0.5,
+    contrast: 1.3,
+    brightness: 1.0,
+    effectType: 'xray',
+  },
+  oilPainting: {
+    name: 'Oil Painting',
+    backgroundColor: '#2a2a1a',
+    fogColor: '#3a3a2a',
+    fogNear: 25,
+    fogFar: 60,
+    groundColor: '#4a5a3a',
+    ambientIntensity: 0.6,
+    ambientColor: '#ffffee',
+    directionalIntensity: 0.9,
+    directionalColor: '#ffeecc',
+    obstacleColors: ['#8b4513', '#228b22', '#4169e1', '#daa520', '#8b008b', '#2f4f4f'],
+    playerColor: '#cd853f',
+    saturation: 1.4,
+    contrast: 1.1,
+    brightness: 1.0,
+    effectType: 'oilPainting',
+  },
+  pixelate: {
+    name: 'Pixelate',
+    backgroundColor: '#1a1a2e',
+    fogColor: '#1a1a2e',
+    fogNear: 20,
+    fogFar: 50,
+    groundColor: '#2d5a27',
+    ambientIntensity: 0.5,
+    ambientColor: '#ffffff',
+    directionalIntensity: 0.8,
+    directionalColor: '#ffffff',
+    obstacleColors: ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff'],
+    playerColor: '#4488ff',
+    saturation: 1.5,
+    contrast: 1.3,
+    brightness: 1.1,
+    effectType: 'pixelate',
+  },
+  negative: {
+    name: 'Negative',
+    backgroundColor: '#f0f0f0',
+    fogColor: '#e0e0e0',
+    fogNear: 15,
+    fogFar: 50,
+    groundColor: '#c0c0b0',
+    ambientIntensity: 0.7,
+    ambientColor: '#ffffff',
+    directionalIntensity: 0.8,
+    directionalColor: '#ffffff',
+    obstacleColors: ['#cccccc', '#bbbbbb', '#dddddd', '#aaaaaa', '#eeeeee', '#999999'],
+    playerColor: '#888888',
+    saturation: 1.0,
+    contrast: 1.0,
+    brightness: 1.0,
+    effectType: 'negative',
+  },
+  astral: {
+    name: 'Astral',
+    backgroundColor: '#0a0015',
+    fogColor: '#150025',
+    fogNear: 15,
+    fogFar: 50,
+    groundColor: '#1a0a2a',
+    ambientIntensity: 0.4,
+    ambientColor: '#aa88ff',
+    directionalIntensity: 0.6,
+    directionalColor: '#ffaaff',
+    obstacleColors: ['#6644aa', '#8866cc', '#aa88ee', '#5533aa', '#7755cc', '#9977ee'],
+    playerColor: '#ccaaff',
+    saturation: 1.2,
+    contrast: 1.0,
+    brightness: 1.05,
+    effectType: 'astral',
+  },
+  tiltShift: {
+    name: 'Tilt Shift',
+    backgroundColor: '#87ceeb',
+    fogColor: '#a8d8ea',
+    fogNear: 40,
+    fogFar: 100,
+    groundColor: '#228b22',
+    ambientIntensity: 0.7,
+    ambientColor: '#fffacd',
+    directionalIntensity: 1.2,
+    directionalColor: '#fff8dc',
+    obstacleColors: ['#8b4513', '#228b22', '#32cd32', '#daa520', '#cd853f', '#6b8e23'],
+    playerColor: '#4169e1',
+    saturation: 1.4,
+    contrast: 1.2,
+    brightness: 1.15,
+    effectType: 'tiltShift',
+  },
 }
 
 export const visualStyleOptions: VisualStyle[] = [
@@ -264,4 +444,13 @@ export const visualStyleOptions: VisualStyle[] = [
   'ocean',
   'sketch',
   'dreamscape',
+  'thermal',
+  'glitch',
+  'underwater',
+  'xray',
+  'oilPainting',
+  'pixelate',
+  'negative',
+  'astral',
+  'tiltShift',
 ]

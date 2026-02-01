@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { EffectComposer, EffectPass, RenderPass } from 'postprocessing'
+import { Effect, EffectComposer, EffectPass, RenderPass } from 'postprocessing'
 import { gameStore } from '../store'
 import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, cameraTransitionSpeedAtom, gravityAtom, treeColorVariationAtom, groundVibranceAtom, waterShaderScaleAtom, showHitboxesAtom } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, type VisualStyleConfig } from '../types/visualStyles'
@@ -13,8 +13,7 @@ import { ParticleSystem } from '../particles/ParticleSystem'
 import { PhysicsWorld } from '../physics/PhysicsWorld'
 import { WaterMaterial } from '../materials/WaterMaterial'
 import { CapeMaterial } from '../materials/CapeMaterial'
-import { EdgeDetectionEffect } from '../effects/EdgeDetectionEffect'
-import { DreamscapeEffect } from '../effects/DreamscapeEffect'
+import { createEffect, EdgeDetectionEffect } from '../effects'
 import type { VisualEffectType } from '../types/visualStyles'
 
 /**
@@ -95,7 +94,7 @@ export class ThreeEngine {
   private composer: EffectComposer
   private currentEffectType: VisualEffectType = 'none'
   private currentEffectPass: EffectPass | null = null
-  private currentEffect: EdgeDetectionEffect | DreamscapeEffect | null = null
+  private currentEffect: Effect | null = null
 
   constructor(container: HTMLElement) {
     // Initialize renderer
@@ -184,18 +183,16 @@ export class ThreeEngine {
         this.currentEffectPass = null
       }
 
-      // Create new effect
-      if (newEffectType === 'edgeDetection') {
-        this.currentEffect = new EdgeDetectionEffect({
-          edgeColor: config.edgeColor ?? '#000000',
-          threshold: config.edgeThreshold ?? 0.1,
+      // Create new effect using registry
+      if (newEffectType !== 'none') {
+        this.currentEffect = createEffect(newEffectType, {
+          edgeColor: config.edgeColor,
+          edgeThreshold: config.edgeThreshold,
         })
-        this.currentEffectPass = new EffectPass(this.camera, this.currentEffect)
-        this.composer.addPass(this.currentEffectPass)
-      } else if (newEffectType === 'dreamscape') {
-        this.currentEffect = new DreamscapeEffect()
-        this.currentEffectPass = new EffectPass(this.camera, this.currentEffect)
-        this.composer.addPass(this.currentEffectPass)
+        if (this.currentEffect) {
+          this.currentEffectPass = new EffectPass(this.camera, this.currentEffect)
+          this.composer.addPass(this.currentEffectPass)
+        }
       }
 
       this.currentEffectType = newEffectType
