@@ -5,4 +5,5 @@ export default defineMask({
   visualStyle: 'nature',
   cameraDistance: 18,
   cameraViewAngle: 60,
+  playerSpeed: 11,
 })

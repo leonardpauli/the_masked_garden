@@ -2,17 +2,18 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { Effect, EffectComposer, EffectPass, RenderPass } from 'postprocessing'
 import { gameStore } from '../store'
-import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, cameraTransitionSpeedAtom, gravityAtom, treeColorVariationAtom, groundVibranceAtom, waterShaderScaleAtom, showHitboxesAtom, effectParamsAtom } from '../store/atoms/configAtoms'
+import { visualStyleAtom, playerSpeedAtom, cameraDistanceAtom, cameraSmoothingAtom, cameraViewAngleAtom, cameraTransitionSpeedAtom, gravityAtom, treeColorVariationAtom, groundVibranceAtom, waterShaderScaleAtom, showHitboxesAtom, effectParamsAtom, cubePushStrengthAtom } from '../store/atoms/configAtoms'
 import { visualStyleConfigs, type VisualStyleConfig } from '../types/visualStyles'
 import { inputDirectionAtom } from '../store/atoms/inputAtoms'
 import { gameStateAtom } from '../store/atoms/gameAtoms'
 import { playerColorHueAtom, jumpRequestedAtom, jumpEnergyAtom, playerPositionAtom } from '../store/atoms/playerAtoms'
 import { otherPlayersAtom } from '../store/atoms/onlineAtoms'
-import { setPlayerPosition, clearJumpRequest, setJumpEnergy, setGrounded } from '../actions/playerActions'
+import { setPlayerPosition, clearJumpRequest, setJumpEnergy, setGrounded, setOwnedCubePosition, setOwnedCubeVelocity, setOwnedCubeSpawned } from '../actions/playerActions'
 import { ParticleSystem } from '../particles/ParticleSystem'
 import { PhysicsWorld } from '../physics/PhysicsWorld'
 import { WaterMaterial } from '../materials/WaterMaterial'
 import { CapeMaterial } from '../materials/CapeMaterial'
+import { GhostCapeMaterial } from '../materials/GhostCapeMaterial'
 import { createEffect, EdgeDetectionEffect } from '../effects'
 import type { VisualEffectType } from '../types/visualStyles'
 import { createMaskMesh, getMaskColor } from '../geometry/MaskGeometry'
@@ -44,7 +45,7 @@ export class ThreeEngine {
 
   // Physics state
   private playerVelocity = new THREE.Vector3(0, 0, 0)
-  private playerRadius = 0.5 // Approximate player collision radius
+  private playerRadius = 0.35 // Approximate player collision radius (0.7x visual)
   private groundLevel = 0.5 // Y position when on ground
   private lastTime = 0
 
@@ -76,6 +77,8 @@ export class ThreeEngine {
 
   // Hitbox debug visualization
   private hitboxGroup: THREE.Group | null = null
+  private playerHitboxMesh: THREE.Mesh | null = null
+  private cubeHitboxMeshes: Map<string, THREE.Mesh> = new Map()
   private hitboxMaterial: THREE.MeshBasicMaterial = new THREE.MeshBasicMaterial({
     color: 0xff0000,
     wireframe: true,
@@ -85,13 +88,16 @@ export class ThreeEngine {
 
   // Ghost players (other online players)
   private ghostPlayers: Map<number, {
-    mesh: THREE.Mesh
+    group: THREE.Group
+    material: GhostCapeMaterial
     currentPos: THREE.Vector3
     currentVel: THREE.Vector3
     targetPos: THREE.Vector3
     targetVel: THREE.Vector3
   }> = new Map()
-  private ghostPlayerGeometry: THREE.SphereGeometry | null = null
+  private ghostHeadTemplate: THREE.Group | null = null
+  private ghostBodyTemplate: THREE.Group | null = null
+  private ghostTemplatesLoaded = false
   private ghostSpringStiffness = 15
   private ghostDampingRatio = 1.0
 
@@ -117,6 +123,24 @@ export class ThreeEngine {
   private maskRotationSpeed = 0.5  // Radians per second
   private maskCollectDuration = 0.3 // Seconds to collect animation
   private maskDropImmunity = 1.0   // Seconds of immunity after dropping a mask
+
+  // Owned physics cube
+  private ownedCube: THREE.Mesh | null = null
+  private ownedCubeVelocity = new THREE.Vector3()
+  private cubeSize = 1.3
+  private cubeGroundLevel = 0.65 // Half of cube size
+  private cubeFriction = 0.95
+  private cubeBounce = 0.5
+  private cubeSpawnOffset = new THREE.Vector3(1.5, 0.65, 0)
+
+  // Ghost cubes (other players' cubes)
+  private ghostCubes: Map<number, {
+    mesh: THREE.Mesh
+    currentPos: THREE.Vector3
+    currentVel: THREE.Vector3
+    targetPos: THREE.Vector3
+    targetVel: THREE.Vector3
+  }> = new Map()
 
   constructor(container: HTMLElement) {
     // Initialize renderer
@@ -155,6 +179,7 @@ export class ThreeEngine {
     this.setupScene()
     this.setupLighting()
     this.loadPlayer()
+    this.loadGhostTemplates()
     this.generateObstacles(150, 100)
     this.loadWell(8, 8)
     this.loadLevel('/levels/starterlevel.json', 0, -5)
@@ -347,6 +372,32 @@ export class ThreeEngine {
     })
   }
 
+  private loadGhostTemplates(): void {
+    const loader = new GLTFLoader()
+    let headLoaded = false
+    let bodyLoaded = false
+
+    const checkLoaded = () => {
+      if (headLoaded && bodyLoaded) {
+        this.ghostTemplatesLoaded = true
+      }
+    }
+
+    // Load head template (will be given ghost skin color)
+    loader.load('/models/player/charHead.glb', (gltf) => {
+      this.ghostHeadTemplate = gltf.scene.clone()
+      headLoaded = true
+      checkLoaded()
+    })
+
+    // Load body template (will use GhostCapeMaterial)
+    loader.load('/models/player/charBody.glb', (gltf) => {
+      this.ghostBodyTemplate = gltf.scene.clone()
+      bodyLoaded = true
+      checkLoaded()
+    })
+  }
+
   private generateObstacles(count: number, spread: number): void {
     const loader = new GLTFLoader()
 
@@ -409,8 +460,8 @@ export class ThreeEngine {
         this.obstacleRadii.push(scale)
         this.scene.add(tree)
 
-        // Add physics collider for tree
-        this.physics.addTreeCollider(`tree-${i}`, x, z, scale)
+        // Add physics collider for tree (1/3 of visual scale for tighter collision)
+        this.physics.addTreeCollider(`tree-${i}`, x, z, scale / 3)
       }
     }
 
@@ -623,6 +674,123 @@ export class ThreeEngine {
     gameStore.set(maskPickupsAtom, pickups)
   }
 
+  private createCubeMesh(colorHue: number, opacity: number = 1.0): THREE.Mesh {
+    const geometry = new THREE.BoxGeometry(this.cubeSize, this.cubeSize, this.cubeSize)
+    const color = this.hslToColor(colorHue, 70, 55)
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      transparent: opacity < 1.0,
+      opacity,
+      emissive: color,
+      emissiveIntensity: opacity < 1.0 ? 0.2 : 0,
+    })
+    const mesh = new THREE.Mesh(geometry, material)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    return mesh
+  }
+
+  private spawnOwnedCube(): void {
+    if (this.ownedCube || !this.player) return
+
+    const colorHue = gameStore.get(playerColorHueAtom)
+    this.ownedCube = this.createCubeMesh(colorHue)
+
+    // Spawn near player
+    const spawnPos = this.player.position.clone().add(this.cubeSpawnOffset)
+    this.ownedCube.position.copy(spawnPos)
+    this.ownedCubeVelocity.set(0, 0, 0)
+
+    this.scene.add(this.ownedCube)
+    setOwnedCubeSpawned(true)
+    setOwnedCubePosition({ x: spawnPos.x, y: spawnPos.y, z: spawnPos.z })
+    setOwnedCubeVelocity({ x: 0, y: 0, z: 0 })
+  }
+
+  private updateOwnedCubePhysics(deltaTime: number): void {
+    if (!this.ownedCube || !this.player) return
+
+    const gravity = gameStore.get(gravityAtom)
+    const playerPos = this.player.position
+
+    // Check player-cube collision and transfer momentum
+    const cubePos = this.ownedCube.position
+    const cubeTopY = cubePos.y + this.cubeSize / 2
+
+    // Only check horizontal collision if player is NOT above the cube
+    // (player can stand on top of cube)
+    if (playerPos.y < cubeTopY - 0.1) {
+      const result = this.physics.checkCubePlayerCollision(
+        cubePos.x, cubePos.z, this.cubeSize,
+        playerPos.x, playerPos.z, this.playerRadius
+      )
+
+      if (result.colliding) {
+        // Player is colliding with cube - push cube away
+        // Transfer momentum based on player's movement direction
+        const input = gameStore.get(inputDirectionAtom)
+        const speed = gameStore.get(playerSpeedAtom)
+        const pushStrength = gameStore.get(cubePushStrengthAtom)
+
+        this.ownedCubeVelocity.x += -result.pushX * pushStrength + input.x * speed * deltaTime * 2
+        this.ownedCubeVelocity.z += -result.pushZ * pushStrength + input.z * speed * deltaTime * 2
+      }
+    }
+
+    // Apply gravity
+    this.ownedCubeVelocity.y -= gravity * deltaTime
+
+    // Update position
+    cubePos.x += this.ownedCubeVelocity.x * deltaTime
+    cubePos.y += this.ownedCubeVelocity.y * deltaTime
+    cubePos.z += this.ownedCubeVelocity.z * deltaTime
+
+    // Ground collision
+    if (cubePos.y < this.cubeGroundLevel) {
+      cubePos.y = this.cubeGroundLevel
+      this.ownedCubeVelocity.y = 0
+    }
+
+    // Apply friction (only to XZ movement, when on ground)
+    if (cubePos.y <= this.cubeGroundLevel + 0.01) {
+      this.ownedCubeVelocity.x *= this.cubeFriction
+      this.ownedCubeVelocity.z *= this.cubeFriction
+    }
+
+    // Check obstacle collisions and bounce
+    const obstacleResult = this.physics.checkPlayerCollisions(cubePos.x, cubePos.z, this.cubeSize / 2)
+    if (obstacleResult.blocked) {
+      // Push cube out of obstacle
+      cubePos.x += obstacleResult.pushX
+      cubePos.z += obstacleResult.pushZ
+
+      // Bounce velocity
+      if (Math.abs(obstacleResult.pushX) > Math.abs(obstacleResult.pushZ)) {
+        this.ownedCubeVelocity.x *= -this.cubeBounce
+      } else {
+        this.ownedCubeVelocity.z *= -this.cubeBounce
+      }
+    }
+
+    // Update atoms for network sync
+    setOwnedCubePosition({ x: cubePos.x, y: cubePos.y, z: cubePos.z })
+    setOwnedCubeVelocity({
+      x: this.ownedCubeVelocity.x,
+      y: this.ownedCubeVelocity.y,
+      z: this.ownedCubeVelocity.z
+    })
+
+    // Register owned cube for ground detection (not static - player can push it)
+    this.physics.setDynamicCubeCollider(
+      'owned-cube',
+      cubePos.x,
+      cubePos.y,
+      cubePos.z,
+      this.cubeSize,
+      false // Not static - can be pushed
+    )
+  }
+
   private dropMaskAtPosition(maskType: MaskState, x: number, z: number, currentTime: number): void {
     const id = `mask-${maskType}-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
@@ -754,6 +922,8 @@ export class ThreeEngine {
       })
       this.scene.remove(this.hitboxGroup)
       this.hitboxGroup = null
+      this.playerHitboxMesh = null
+      this.cubeHitboxMeshes.clear()
     }
 
     // Check if hitboxes should be shown
@@ -787,6 +957,37 @@ export class ThreeEngine {
       mesh.position.set(box.x, box.height / 2, box.z)
       mesh.rotation.y = box.rotation
       this.hitboxGroup.add(mesh)
+    }
+
+    // Add dynamic cubes hitboxes (yellow wireframe)
+    this.cubeHitboxMeshes.clear()
+    const dynamicCubes = this.physics.getDynamicCubes()
+    const cubeHitboxMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffff00,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.8
+    })
+    for (const [id, cube] of dynamicCubes) {
+      const geometry = new THREE.BoxGeometry(cube.size, cube.size, cube.size)
+      const mesh = new THREE.Mesh(geometry, cubeHitboxMaterial)
+      mesh.position.set(cube.x, cube.y, cube.z)
+      this.hitboxGroup.add(mesh)
+      this.cubeHitboxMeshes.set(id, mesh)
+    }
+
+    // Add player hitbox (green wireframe sphere)
+    if (this.player) {
+      const playerHitboxMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00ff00,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.8
+      })
+      const playerGeometry = new THREE.SphereGeometry(this.playerRadius, 16, 8)
+      this.playerHitboxMesh = new THREE.Mesh(playerGeometry, playerHitboxMaterial)
+      this.playerHitboxMesh.position.copy(this.player.position)
+      this.hitboxGroup.add(this.playerHitboxMesh)
     }
 
     this.scene.add(this.hitboxGroup)
@@ -863,10 +1064,8 @@ export class ThreeEngine {
   private updateGhostPlayers(deltaTime: number): void {
     const otherPlayers = gameStore.get(otherPlayersAtom)
 
-    // Create shared geometry if not exists
-    if (!this.ghostPlayerGeometry) {
-      this.ghostPlayerGeometry = new THREE.SphereGeometry(0.4, 12, 8)
-    }
+    // Wait for templates to load
+    if (!this.ghostTemplatesLoaded) return
 
     // Track which players exist this frame
     const currentPlayerIds = new Set(otherPlayers.keys())
@@ -874,8 +1073,13 @@ export class ThreeEngine {
     // Remove ghost players that are no longer in the map
     for (const [id, ghost] of this.ghostPlayers) {
       if (!currentPlayerIds.has(id)) {
-        this.scene.remove(ghost.mesh)
-        ghost.mesh.material instanceof THREE.Material && ghost.mesh.material.dispose()
+        this.scene.remove(ghost.group)
+        ghost.material.dispose()
+        ghost.group.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.geometry?.dispose()
+          }
+        })
         this.ghostPlayers.delete(id)
       }
     }
@@ -885,23 +1089,59 @@ export class ThreeEngine {
       let ghost = this.ghostPlayers.get(id)
 
       if (!ghost) {
-        // Create new ghost player
-        const material = new THREE.MeshStandardMaterial({
-          color: this.hslToColor(playerState.colorHue, 70, 55),
-          transparent: true,
-          opacity: 0.2,
-          emissive: this.hslToColor(playerState.colorHue, 70, 55),
-          emissiveIntensity: 0.3,
+        // Create new ghost player with cloned model
+        const ghostColor = this.hslToColor(playerState.colorHue, 70, 60)
+
+        // Create ghost material with transparency and fresnel effect
+        const material = new GhostCapeMaterial({
+          color: ghostColor,
+          opacity: 0.6,
+          lagWeight: 0.08,
+          displacementStrength: 0.15,
         })
 
-        const mesh = new THREE.Mesh(this.ghostPlayerGeometry, material)
-        mesh.castShadow = false
-        mesh.receiveShadow = false
-        mesh.position.set(playerState.x, playerState.y, playerState.z)
-        this.scene.add(mesh)
+        // Create ghost group
+        const group = new THREE.Group()
+        group.scale.setScalar(0.5)
+
+        // Clone and add head with ghostly skin
+        if (this.ghostHeadTemplate) {
+          const head = this.ghostHeadTemplate.clone()
+          head.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              child.material = new THREE.MeshStandardMaterial({
+                color: ghostColor,
+                transparent: true,
+                opacity: 0.5,
+                emissive: ghostColor,
+                emissiveIntensity: 0.2,
+              })
+              child.castShadow = false
+              child.receiveShadow = false
+            }
+          })
+          group.add(head)
+        }
+
+        // Clone and add body with ghost cape material
+        if (this.ghostBodyTemplate) {
+          const body = this.ghostBodyTemplate.clone()
+          body.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              child.material = material
+              child.castShadow = false
+              child.receiveShadow = false
+            }
+          })
+          group.add(body)
+        }
+
+        group.position.set(playerState.x, playerState.y, playerState.z)
+        this.scene.add(group)
 
         ghost = {
-          mesh,
+          group,
+          material,
           currentPos: new THREE.Vector3(playerState.x, playerState.y, playerState.z),
           currentVel: new THREE.Vector3(0, 0, 0),
           targetPos: new THREE.Vector3(playerState.x, playerState.y, playerState.z),
@@ -930,17 +1170,98 @@ export class ThreeEngine {
       ghost.currentVel.addScaledVector(acceleration, deltaTime)
       ghost.currentPos.addScaledVector(ghost.currentVel, deltaTime)
 
+      // Apply to group and update material
+      ghost.group.position.copy(ghost.currentPos)
+      ghost.material.update(ghost.currentVel, deltaTime)
+    }
+  }
+
+  private updateGhostCubes(deltaTime: number): void {
+    const otherPlayers = gameStore.get(otherPlayersAtom)
+
+    // Track which players have cubes this frame
+    const currentPlayerIds = new Set<number>()
+    for (const [id, playerState] of otherPlayers) {
+      if (playerState.cube) {
+        currentPlayerIds.add(id)
+      }
+    }
+
+    // Remove ghost cubes for disconnected players or players without cubes
+    for (const [id, ghost] of this.ghostCubes) {
+      if (!currentPlayerIds.has(id)) {
+        this.scene.remove(ghost.mesh)
+        ghost.mesh.geometry.dispose()
+        if (ghost.mesh.material instanceof THREE.Material) {
+          ghost.mesh.material.dispose()
+        }
+        this.ghostCubes.delete(id)
+        this.physics.removeDynamicCubeCollider(`ghost-cube-${id}`)
+      }
+    }
+
+    // Update or create ghost cubes
+    for (const [id, playerState] of otherPlayers) {
+      if (!playerState.cube) continue
+
+      let ghost = this.ghostCubes.get(id)
+
+      if (!ghost) {
+        // Create new ghost cube with semi-transparent rendering
+        const mesh = this.createCubeMesh(playerState.colorHue, 0.5)
+        mesh.position.set(playerState.cube.x, playerState.cube.y, playerState.cube.z)
+        this.scene.add(mesh)
+
+        ghost = {
+          mesh,
+          currentPos: new THREE.Vector3(playerState.cube.x, playerState.cube.y, playerState.cube.z),
+          currentVel: new THREE.Vector3(0, 0, 0),
+          targetPos: new THREE.Vector3(playerState.cube.x, playerState.cube.y, playerState.cube.z),
+          targetVel: new THREE.Vector3(playerState.cube.vx, playerState.cube.vy, playerState.cube.vz),
+        }
+        this.ghostCubes.set(id, ghost)
+      }
+
+      // Update target from server state
+      ghost.targetPos.set(playerState.cube.x, playerState.cube.y, playerState.cube.z)
+      ghost.targetVel.set(playerState.cube.vx, playerState.cube.vy, playerState.cube.vz)
+
+      // Spring-damper interpolation for smooth movement (same as ghost players)
+      const damping = 2 * this.ghostDampingRatio * Math.sqrt(this.ghostSpringStiffness)
+
+      const positionDiff = new THREE.Vector3().subVectors(ghost.targetPos, ghost.currentPos)
+      const velocityDiff = new THREE.Vector3().subVectors(ghost.targetVel, ghost.currentVel)
+
+      const springForce = positionDiff.multiplyScalar(this.ghostSpringStiffness)
+      const dampingForce = velocityDiff.multiplyScalar(damping)
+
+      const acceleration = springForce.add(dampingForce)
+
+      ghost.currentVel.addScaledVector(acceleration, deltaTime)
+      ghost.currentPos.addScaledVector(ghost.currentVel, deltaTime)
+
       // Apply to mesh
       ghost.mesh.position.copy(ghost.currentPos)
+
+      // Register as static collider so local player can't push it
+      this.physics.setDynamicCubeCollider(
+        `ghost-cube-${id}`,
+        ghost.currentPos.x,
+        ghost.currentPos.y,
+        ghost.currentPos.z,
+        this.cubeSize,
+        true // isStatic = true means player collides but can't push
+      )
     }
   }
 
   private checkObstacleCollisions(): void {
     if (!this.player || !this.physics.isReady()) return
 
-    const result = this.physics.checkPlayerCollisions(
+    const result = this.physics.checkPlayerCollisions3D(
       this.player.position.x,
       this.player.position.z,
+      this.player.position.y,
       this.playerRadius
     )
 
@@ -979,12 +1300,19 @@ export class ThreeEngine {
       this.player.position.x += input.x * speed * deltaTime
       this.player.position.z += input.z * speed * deltaTime
 
-      // Check grounded state (before movement, for accurate detection)
+      // Check grounded state with dynamic ground height
       const groundHalfSize = 200
       const isOverGround =
         Math.abs(this.player.position.x) < groundHalfSize &&
         Math.abs(this.player.position.z) < groundHalfSize
-      const isGrounded = isOverGround && this.player.position.y <= this.groundLevel + 0.01
+
+      // Get dynamic ground height (includes objects player can stand on)
+      const dynamicGroundLevel = this.physics.getGroundHeight(
+        this.player.position.x,
+        this.player.position.z,
+        this.player.position.y
+      )
+      const isGrounded = isOverGround && this.player.position.y <= dynamicGroundLevel + 0.01
       setGrounded(isGrounded)
 
       // Handle jump request
@@ -1009,9 +1337,9 @@ export class ThreeEngine {
           // Deplete energy (never below 0)
           setJumpEnergy(remainingEnergy)
 
-          // Emit jump particles
+          // Emit jump particles at current ground level
           this.particleSystem.emit(
-            { x: this.player.position.x, y: this.groundLevel, z: this.player.position.z },
+            { x: this.player.position.x, y: dynamicGroundLevel, z: this.player.position.z },
             'footstep'
           )
         }
@@ -1031,7 +1359,7 @@ export class ThreeEngine {
       if (isMoving && isGrounded && nowSeconds - this.lastFootstepTime > this.footstepInterval) {
         this.lastFootstepTime = nowSeconds
         this.particleSystem.emit(
-          { x: this.player.position.x, y: 0.1, z: this.player.position.z },
+          { x: this.player.position.x, y: dynamicGroundLevel, z: this.player.position.z },
           'footstep'
         )
       }
@@ -1040,9 +1368,9 @@ export class ThreeEngine {
       this.playerVelocity.y -= gravity * deltaTime
       this.player.position.y += this.playerVelocity.y * deltaTime
 
-      // Ground collision - only if over ground
-      if (isOverGround && this.player.position.y < this.groundLevel) {
-        this.player.position.y = this.groundLevel
+      // Ground collision using dynamic ground level
+      if (isOverGround && this.player.position.y < dynamicGroundLevel) {
+        this.player.position.y = dynamicGroundLevel
         this.playerVelocity.y = 0
       }
 
@@ -1071,6 +1399,22 @@ export class ThreeEngine {
           z: input.z * speed
         }
         this.capeMaterial.update(movementVelocity, deltaTime)
+      }
+    }
+
+    // Update player hitbox visualization position
+    if (this.playerHitboxMesh && this.player) {
+      this.playerHitboxMesh.position.copy(this.player.position)
+    }
+
+    // Update cube hitbox visualization positions
+    if (this.cubeHitboxMeshes.size > 0) {
+      const dynamicCubes = this.physics.getDynamicCubes()
+      for (const [id, mesh] of this.cubeHitboxMeshes) {
+        const cube = dynamicCubes.get(id)
+        if (cube) {
+          mesh.position.set(cube.x, cube.y, cube.z)
+        }
       }
     }
 
@@ -1123,6 +1467,19 @@ export class ThreeEngine {
     // Update ghost players (other online players)
     this.updateGhostPlayers(deltaTime)
 
+    // Spawn owned cube if player exists and cube not yet spawned
+    if (this.player && !this.ownedCube && gameState === 'playing') {
+      this.spawnOwnedCube()
+    }
+
+    // Update owned cube physics
+    if (gameState === 'playing') {
+      this.updateOwnedCubePhysics(deltaTime)
+    }
+
+    // Update ghost cubes (other players' cubes)
+    this.updateGhostCubes(deltaTime)
+
     // Update mask pickups (animate and check for collection)
     const timeSeconds = now / 1000
     this.updateMaskPickups(deltaTime, timeSeconds)
@@ -1168,13 +1525,18 @@ export class ThreeEngine {
 
     // Dispose ghost players
     for (const [, ghost] of this.ghostPlayers) {
-      this.scene.remove(ghost.mesh)
-      if (ghost.mesh.material instanceof THREE.Material) {
-        ghost.mesh.material.dispose()
-      }
+      this.scene.remove(ghost.group)
+      ghost.material.dispose()
+      ghost.group.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry?.dispose()
+          if (child.material instanceof THREE.Material) {
+            child.material.dispose()
+          }
+        }
+      })
     }
     this.ghostPlayers.clear()
-    this.ghostPlayerGeometry?.dispose()
 
     // Dispose mask pickups
     for (const [, pickup] of this.maskPickups) {
@@ -1185,6 +1547,27 @@ export class ThreeEngine {
       }
     }
     this.maskPickups.clear()
+
+    // Dispose owned cube
+    if (this.ownedCube) {
+      this.scene.remove(this.ownedCube)
+      this.ownedCube.geometry.dispose()
+      if (this.ownedCube.material instanceof THREE.Material) {
+        this.ownedCube.material.dispose()
+      }
+      this.ownedCube = null
+    }
+
+    // Dispose ghost cubes
+    for (const [id, ghost] of this.ghostCubes) {
+      this.scene.remove(ghost.mesh)
+      ghost.mesh.geometry.dispose()
+      if (ghost.mesh.material instanceof THREE.Material) {
+        ghost.mesh.material.dispose()
+      }
+      this.physics.removeDynamicCubeCollider(`ghost-cube-${id}`)
+    }
+    this.ghostCubes.clear()
 
     // Dispose of Three.js resources
     this.obstacles.forEach(obj => {

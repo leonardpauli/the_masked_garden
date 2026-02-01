@@ -15,3 +15,8 @@ export const playerColorHueAtom = atom<number>(0)
 export const jumpEnergyAtom = atom<number>(1.0) // 0-1, represents available jump energy
 export const isGroundedAtom = atom<boolean>(true) // Whether player is on ground
 export const jumpRequestedAtom = atom<boolean>(false) // Signal to jump (consumed by physics)
+
+// Owned physics cube
+export const ownedCubePositionAtom = atom<Vec3>({ x: 1.5, y: 0.65, z: 0 })
+export const ownedCubeVelocityAtom = atom<Vec3>({ x: 0, y: 0, z: 0 })
+export const ownedCubeSpawnedAtom = atom<boolean>(false)

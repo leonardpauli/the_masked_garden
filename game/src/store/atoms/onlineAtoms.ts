@@ -1,5 +1,14 @@
 import { atom } from 'jotai'
 
+export interface CubeState {
+  x: number
+  y: number
+  z: number
+  vx: number
+  vy: number
+  vz: number
+}
+
 export interface PlayerState {
   x: number
   y: number
@@ -8,6 +17,7 @@ export interface PlayerState {
   vy: number
   vz: number
   colorHue: number
+  cube?: CubeState
 }
 
 export const playerCountAtom = atom(0)

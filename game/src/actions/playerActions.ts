@@ -1,5 +1,5 @@
 import { gameStore } from '../store'
-import { playerPositionAtom, playerVelocityAtom, playerHealthAtom, jumpEnergyAtom, isGroundedAtom, jumpRequestedAtom, Vec3 } from '../store/atoms/playerAtoms'
+import { playerPositionAtom, playerVelocityAtom, playerHealthAtom, jumpEnergyAtom, isGroundedAtom, jumpRequestedAtom, ownedCubePositionAtom, ownedCubeVelocityAtom, ownedCubeSpawnedAtom, Vec3 } from '../store/atoms/playerAtoms'
 
 export function setPlayerPosition(position: Vec3): void {
   gameStore.set(playerPositionAtom, position)
@@ -52,4 +52,29 @@ export function getJumpEnergy(): number {
 
 export function isGrounded(): boolean {
   return gameStore.get(isGroundedAtom)
+}
+
+// Owned cube actions
+export function setOwnedCubePosition(position: Vec3): void {
+  gameStore.set(ownedCubePositionAtom, position)
+}
+
+export function setOwnedCubeVelocity(velocity: Vec3): void {
+  gameStore.set(ownedCubeVelocityAtom, velocity)
+}
+
+export function getOwnedCubePosition(): Vec3 {
+  return gameStore.get(ownedCubePositionAtom)
+}
+
+export function getOwnedCubeVelocity(): Vec3 {
+  return gameStore.get(ownedCubeVelocityAtom)
+}
+
+export function isOwnedCubeSpawned(): boolean {
+  return gameStore.get(ownedCubeSpawnedAtom)
+}
+
+export function setOwnedCubeSpawned(spawned: boolean): void {
+  gameStore.set(ownedCubeSpawnedAtom, spawned)
 }

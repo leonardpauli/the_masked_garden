@@ -56,6 +56,7 @@ export const cameraPresetsWithPersistAtom = atom(
 
 // Physics config
 export const gravityAtom = atom<number>(getDefault('gravity', 20))
+export const cubePushStrengthAtom = atom<number>(8) // How hard player pushes cubes
 
 // Game config
 export const collisionCooldownAtom = atom<number>(500)

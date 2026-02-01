@@ -1,6 +1,6 @@
 import { gameStore } from '../store'
 import { playerCountAtom, wsConnectedAtom, myPlayerIdAtom, otherPlayersAtom, lastBuildTimeAtom, PlayerState } from '../store/atoms/onlineAtoms'
-import { playerPositionAtom, playerVelocityAtom, playerColorHueAtom } from '../store/atoms/playerAtoms'
+import { playerPositionAtom, playerVelocityAtom, playerColorHueAtom, ownedCubePositionAtom, ownedCubeVelocityAtom, ownedCubeSpawnedAtom } from '../store/atoms/playerAtoms'
 import { getOrCreateIdentity, deriveColorHue } from './actorIdentity'
 
 let ws: WebSocket | null = null
@@ -45,16 +45,38 @@ export async function connectWebSocket() {
       if (ws?.readyState === WebSocket.OPEN) {
         const pos = gameStore.get(playerPositionAtom)
         const vel = gameStore.get(playerVelocityAtom)
+        const cubeSpawned = gameStore.get(ownedCubeSpawnedAtom)
+
+        const stateMsg: {
+          x: number; y: number; z: number
+          vx: number; vy: number; vz: number
+          cube?: { x: number; y: number; z: number; vx: number; vy: number; vz: number }
+        } = {
+          x: pos.x,
+          y: pos.y,
+          z: pos.z,
+          vx: vel.x,
+          vy: vel.y,
+          vz: vel.z,
+        }
+
+        // Include cube state if spawned
+        if (cubeSpawned) {
+          const cubePos = gameStore.get(ownedCubePositionAtom)
+          const cubeVel = gameStore.get(ownedCubeVelocityAtom)
+          stateMsg.cube = {
+            x: cubePos.x,
+            y: cubePos.y,
+            z: cubePos.z,
+            vx: cubeVel.x,
+            vy: cubeVel.y,
+            vz: cubeVel.z,
+          }
+        }
+
         ws.send(JSON.stringify({
           type: 'state',
-          state: {
-            x: pos.x,
-            y: pos.y,
-            z: pos.z,
-            vx: vel.x,
-            vy: vel.y,
-            vz: vel.z,
-          }
+          state: stateMsg
         }))
       }
     }, 200)

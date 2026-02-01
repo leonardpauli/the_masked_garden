@@ -82,14 +82,24 @@ func deriveColorHue(publicKey string) float64 {
 	return float64(hash % 360)
 }
 
+type CubeState struct {
+	X  float64 `json:"x"`
+	Y  float64 `json:"y"`
+	Z  float64 `json:"z"`
+	VX float64 `json:"vx"`
+	VY float64 `json:"vy"`
+	VZ float64 `json:"vz"`
+}
+
 type PlayerState struct {
-	X        float64 `json:"x"`
-	Y        float64 `json:"y"`
-	Z        float64 `json:"z"`
-	VX       float64 `json:"vx"`
-	VY       float64 `json:"vy"`
-	VZ       float64 `json:"vz"`
-	ColorHue float64 `json:"colorHue"`
+	X        float64    `json:"x"`
+	Y        float64    `json:"y"`
+	Z        float64    `json:"z"`
+	VX       float64    `json:"vx"`
+	VY       float64    `json:"vy"`
+	VZ       float64    `json:"vz"`
+	ColorHue float64    `json:"colorHue"`
+	Cube     *CubeState `json:"cube,omitempty"`
 }
 
 type Player struct {

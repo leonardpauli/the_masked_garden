@@ -1,8 +1,18 @@
 import { gameStore } from '../store'
 import { gameStateAtom, scoreAtom } from '../store/atoms/gameAtoms'
+import { maskStateAtom } from '../store/atoms/maskAtoms'
 import { resetPlayer } from './playerActions'
-import { applyPlayingCamera, restoreCurrentMaskCamera } from '../masksys/maskCallbacks'
+import { setCameraDistance, setCameraViewAngle } from './cameraActions'
+import { maskRegistry } from '../masksys/masks'
 import type { GameState } from '../types/game'
+
+/**
+ * Camera config for "playing" mode
+ */
+const PLAYING_CAMERA = {
+  viewAngle: 70,
+  distance: 10,
+}
 
 export function setGameState(state: GameState): void {
   gameStore.set(gameStateAtom, state)
@@ -14,7 +24,8 @@ export function startGame(): void {
   gameStore.set(gameStateAtom, 'playing')
 
   // Animate camera to gameplay view
-  applyPlayingCamera()
+  setCameraViewAngle(PLAYING_CAMERA.viewAngle)
+  setCameraDistance(PLAYING_CAMERA.distance)
 }
 
 export function pauseGame(): void {
@@ -46,5 +57,12 @@ export function resetGame(): void {
   gameStore.set(gameStateAtom, 'menu')
 
   // Restore current mask's camera settings
-  restoreCurrentMaskCamera()
+  const currentMask = gameStore.get(maskStateAtom)
+  const config = maskRegistry[currentMask]
+  if (config.cameraDistance !== undefined) {
+    setCameraDistance(config.cameraDistance)
+  }
+  if (config.cameraViewAngle !== undefined) {
+    setCameraViewAngle(config.cameraViewAngle)
+  }
 }

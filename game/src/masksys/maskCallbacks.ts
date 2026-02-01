@@ -7,17 +7,10 @@
 
 import type { MaskState, MaskStateCallbacks } from './types'
 import { maskRegistry, type MaskConfig } from './masks'
-import {
-  visualStyleAtom,
-  effectParamsAtom,
-  cameraDistanceAtom,
-  cameraViewAngleAtom,
-  gravityAtom,
-  playerSpeedAtom,
-} from '../store/atoms/configAtoms'
-import { gameStateAtom } from '../store/atoms/gameAtoms'
-import { maskStateAtom } from '../store/atoms/maskAtoms'
 import { gameStore } from '../store'
+import { maskStateAtom } from '../store/atoms/maskAtoms'
+import { visualStyleAtom, effectParamsAtom, gravityAtom, playerSpeedAtom, cubePushStrengthAtom } from '../store/atoms/configAtoms'
+import { setCameraDistance, setCameraViewAngle } from '../actions/cameraActions'
 
 /**
  * Camera config for "playing" mode (overrides mask camera when game is active)
@@ -46,10 +39,10 @@ function applyMaskConfig(config: MaskConfig, applyCamera: boolean): void {
   // Camera (only apply if not in playing state, or if explicitly requested)
   if (applyCamera) {
     if (config.cameraDistance !== undefined) {
-      gameStore.set(cameraDistanceAtom, config.cameraDistance)
+      setCameraDistance(config.cameraDistance)
     }
     if (config.cameraViewAngle !== undefined) {
-      gameStore.set(cameraViewAngleAtom, config.cameraViewAngle)
+      setCameraViewAngle(config.cameraViewAngle)
     }
   }
 
@@ -60,6 +53,8 @@ function applyMaskConfig(config: MaskConfig, applyCamera: boolean): void {
   if (config.playerSpeed !== undefined) {
     gameStore.set(playerSpeedAtom, config.playerSpeed)
   }
+  // Cube push strength (default to 8 if not specified)
+  gameStore.set(cubePushStrengthAtom, config.cubePushStrength ?? 8)
 }
 
 /**
@@ -67,17 +62,16 @@ function applyMaskConfig(config: MaskConfig, applyCamera: boolean): void {
  */
 export function applyInitialMaskConfig(maskState: MaskState): void {
   const config = maskRegistry[maskState]
-  console.log(`[${maskState}] Applying initial config`)
   applyMaskConfig(config, true)
-  config.onEnter?.(maskState) // from=self on init
+  config.onEnter?.(maskState)
 }
 
 /**
  * Apply "playing" camera mode
  */
 export function applyPlayingCamera(): void {
-  gameStore.set(cameraViewAngleAtom, PLAYING_CAMERA.viewAngle)
-  gameStore.set(cameraDistanceAtom, PLAYING_CAMERA.distance)
+  setCameraViewAngle(PLAYING_CAMERA.viewAngle)
+  setCameraDistance(PLAYING_CAMERA.distance)
 }
 
 /**
@@ -87,10 +81,10 @@ export function restoreCurrentMaskCamera(): void {
   const currentMask = gameStore.get(maskStateAtom)
   const config = maskRegistry[currentMask]
   if (config.cameraDistance !== undefined) {
-    gameStore.set(cameraDistanceAtom, config.cameraDistance)
+    setCameraDistance(config.cameraDistance)
   }
   if (config.cameraViewAngle !== undefined) {
-    gameStore.set(cameraViewAngleAtom, config.cameraViewAngle)
+    setCameraViewAngle(config.cameraViewAngle)
   }
 }
 
@@ -102,19 +96,12 @@ function createCallbacks(maskState: MaskState): MaskStateCallbacks {
     onEnter: (from: MaskState) => {
       const config = maskRegistry[maskState]
 
-      // Check if game is playing - if so, don't override camera
-      const gameState = gameStore.get(gameStateAtom)
-      const applyCamera = gameState !== 'playing'
-
-      console.log(`[${maskState}] Entering, from: ${from}, gameState: ${gameState}, applyCamera: ${applyCamera}`)
-      console.log(`[${maskState}] Config:`, config)
-
-      applyMaskConfig(config, applyCamera)
+      // Always apply camera - mask defines the camera for that mask
+      applyMaskConfig(config, true)
       config.onEnter?.(from)
     },
     onExit: (to: MaskState) => {
       const config = maskRegistry[maskState]
-      console.log(`[${maskState}] Leaving, to: ${to}`)
       config.onExit?.(to)
     },
     onUpdate: (deltaTime: number) => {

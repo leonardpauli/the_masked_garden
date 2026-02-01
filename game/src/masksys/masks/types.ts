@@ -19,6 +19,7 @@ export interface MaskConfig {
   // Physics
   gravity?: number
   playerSpeed?: number
+  cubePushStrength?: number // How hard player pushes cubes (default: 8)
 
   // Callbacks for custom behavior
   onEnter?: (from: MaskState) => void
