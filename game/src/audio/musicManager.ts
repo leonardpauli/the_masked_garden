@@ -31,7 +31,7 @@ class MusicManager {
     mask2: { sample: null, playing: null, targetGain: 0, currentGain: 0, maxGain: 0.5 },
     mask3: { sample: null, playing: null, targetGain: 0, currentGain: 0, maxGain: 0.5 },
     mask4: { sample: null, playing: null, targetGain: 0, currentGain: 0, maxGain: 0.5 },
-    wind: { sample: null, playing: null, targetGain: 0, currentGain: 0, maxGain: 0.189 },
+    wind: { sample: null, playing: null, targetGain: 0, currentGain: 0, maxGain: 0.284 },
   }
 
   private initialized = false

@@ -122,6 +122,7 @@ export class ThreeEngine {
     this.loadPlayer()
     this.generateObstacles(150, 100)
     this.loadWell(8, 8)
+    this.loadLevel('/levels/starterlevel.json', 0, -5)
     // Initialize particle system
     this.particleSystem = new ParticleSystem(this.scene, 500)
 
@@ -403,6 +404,101 @@ export class ThreeEngine {
     })
   }
 
+  private loadLevel(url: string, x: number, z: number): void {
+    const loader = new THREE.ObjectLoader()
+    loader.load(url, (object) => {
+      // Position and rotate the level (270 degrees left / 90 degrees right)
+      object.position.set(x, 0, z)
+      object.rotation.y = Math.PI / 2
+
+      // Materials for level objects
+      const benchMaterial = new THREE.MeshStandardMaterial({ color: 0xc4a574 })  // Light brown
+      const hedgeMaterial = new THREE.MeshStandardMaterial({ color: 0x2d5a27 })  // Nice green
+      const potMaterial = new THREE.MeshStandardMaterial({ color: 0xc45a32 })    // Terracotta
+      const plantMaterial = new THREE.MeshStandardMaterial({ color: 0x1a4d1a })  // Dark green
+
+      // Enable shadows and apply materials
+      const initialScale = gameStore.get(waterShaderScaleAtom)
+      object.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.castShadow = true
+          child.receiveShadow = true
+
+          // Apply water shader to wellWater meshes and move up
+          if (child.parent?.name === 'wellWater.glb' || child.name.toLowerCase().includes('water')) {
+            if (!this.waterMaterial) {
+              this.waterMaterial = new WaterMaterial({ uvScale: initialScale })
+            }
+            child.material = this.waterMaterial
+            child.position.y += 0.8  // Move water up near top of well
+          }
+
+          // Color benches light brown
+          if (child.parent?.name === 'bench.glb') {
+            child.material = benchMaterial
+          }
+
+          // Color hedges green
+          if (child.parent?.name === 'smallHedge.glb') {
+            child.material = hedgeMaterial
+          }
+
+          // Color pot terracotta
+          if (child.parent?.name === 'pot.glb') {
+            child.material = potMaterial
+          }
+
+          // Color plant dark green
+          if (child.parent?.name === 'pot.Plant.glb') {
+            child.material = plantMaterial
+          }
+        }
+      })
+
+      this.scene.add(object)
+
+      // Update world matrices before computing colliders
+      object.updateMatrixWorld(true)
+
+      // Add box colliders for benches and hedges
+      const colliderCounts: Record<string, number> = {}
+      const worldQuat = new THREE.Quaternion()
+      const euler = new THREE.Euler()
+
+      const boxColliderObjects = ['bench.glb', 'smallHedge.glb']
+
+      object.traverse((child) => {
+        if (boxColliderObjects.includes(child.name)) {
+          // Get world rotation
+          child.getWorldQuaternion(worldQuat)
+          euler.setFromQuaternion(worldQuat)
+
+          // Compute bounding box for dimensions and center position
+          const box = new THREE.Box3().setFromObject(child)
+          const size = box.getSize(new THREE.Vector3())
+          const center = box.getCenter(new THREE.Vector3())
+
+          // Track index per object type
+          const index = colliderCounts[child.name] ?? 0
+          colliderCounts[child.name] = index + 1
+
+          // Add box collider using bounding box center (world space)
+          this.physics.addBoxCollider(
+            `${child.name}-${index}`,
+            center.x,
+            center.z,
+            size.x,
+            size.z,
+            size.y,
+            euler.y
+          )
+        }
+      })
+
+      console.log('Level loaded:', url)
+    })
+  }
+
   private updateHitboxVisualization(): void {
     // Remove existing hitbox group
     if (this.hitboxGroup) {
@@ -434,6 +530,17 @@ export class ThreeEngine {
       )
       const mesh = new THREE.Mesh(geometry, this.hitboxMaterial)
       mesh.position.set(collider.x, collider.height / 2, collider.z)
+      this.hitboxGroup.add(mesh)
+    }
+
+    // Get all box colliders
+    const boxColliders = this.physics.getBoxColliders()
+
+    for (const [, box] of boxColliders) {
+      const geometry = new THREE.BoxGeometry(box.width, box.height, box.depth)
+      const mesh = new THREE.Mesh(geometry, this.hitboxMaterial)
+      mesh.position.set(box.x, box.height / 2, box.z)
+      mesh.rotation.y = box.rotation
       this.hitboxGroup.add(mesh)
     }
 
