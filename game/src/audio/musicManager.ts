@@ -67,14 +67,19 @@ class MusicManager {
     this.tracks.mask4.sample = mask4
     this.tracks.wind.sample = wind
 
-    // Start all tracks looping at volume 0
-    this.tracks.synths.playing = soundEngine.playSample(synths.id, { loop: true, gain: 0 })
-    this.tracks.pads.playing = soundEngine.playSample(pads.id, { loop: true, gain: 0 })
-    this.tracks.mask1.playing = soundEngine.playSample(mask1.id, { loop: true, gain: 0 })
-    this.tracks.mask2.playing = soundEngine.playSample(mask2.id, { loop: true, gain: 0 })
-    this.tracks.mask3.playing = soundEngine.playSample(mask3.id, { loop: true, gain: 0 })
-    this.tracks.mask4.playing = soundEngine.playSample(mask4.id, { loop: true, gain: 0 })
-    this.tracks.wind.playing = soundEngine.playSample(wind.id, { loop: true, gain: 0 })
+    // Calculate sync offset from system time (ceil rounded to next second for cross-client sync)
+    // Uses wall-clock time so clients with accurate clocks (e.g. Apple devices) play in sync
+    const nowSec = Math.ceil(Date.now() / 1000)
+    const calcOffset = (duration: number) => (nowSec % Math.floor(duration)) % duration
+
+    // Start all tracks looping at volume 0, synced to system time
+    this.tracks.synths.playing = soundEngine.playSample(synths.id, { loop: true, gain: 0, startOffset: calcOffset(synths.duration) })
+    this.tracks.pads.playing = soundEngine.playSample(pads.id, { loop: true, gain: 0, startOffset: calcOffset(pads.duration) })
+    this.tracks.mask1.playing = soundEngine.playSample(mask1.id, { loop: true, gain: 0, startOffset: calcOffset(mask1.duration) })
+    this.tracks.mask2.playing = soundEngine.playSample(mask2.id, { loop: true, gain: 0, startOffset: calcOffset(mask2.duration) })
+    this.tracks.mask3.playing = soundEngine.playSample(mask3.id, { loop: true, gain: 0, startOffset: calcOffset(mask3.duration) })
+    this.tracks.mask4.playing = soundEngine.playSample(mask4.id, { loop: true, gain: 0, startOffset: calcOffset(mask4.duration) })
+    this.tracks.wind.playing = soundEngine.playSample(wind.id, { loop: true, gain: 0, startOffset: calcOffset(wind.duration) })
 
     // Start fade-in for synths and wind immediately (NoMask state)
     this.tracks.synths.targetGain = this.tracks.synths.maxGain
